@@ -11,25 +11,49 @@ class Equipment extends Model
 {
     use HasFactory;
 
+    public $timestamps = false;
+
     protected $fillable = [
         'number',
+        'equipment_type_id',
         'name',
-        'inventory_number',
         'serial_number',
+        'production_date',
+        'year_of_manufacture',
+        'date_accepted_to_accounting',
+        'inventory_number',
+        'department_id',
+        'cabinet_id',
+        'group_id',
+        'equipment_condition_id',
+        'ru_number',
+        'ru_date',
+        'grsi',
         'registration_certificate',
         'date_of_registration',
         'valid_until',
-        'year_of_manufacture',
         'valid_to',
         'verification_period',
         'last_verification_date',
         'instruction_pdf',
         'registration_certificate_pdf',
-        'cabinet_id',
-        'department_id',
         'supplier_id',
         'service_organization_id',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'production_date' => 'date',
+            'date_accepted_to_accounting' => 'date',
+            'ru_date' => 'date',
+        ];
+    }
+
+    public function equipmentType(): BelongsTo
+    {
+        return $this->belongsTo(EquipmentType::class, 'equipment_type_id');
+    }
 
     public function cabinet(): BelongsTo
     {
@@ -39,6 +63,16 @@ class Equipment extends Model
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
+    }
+
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(Group::class);
+    }
+
+    public function equipmentCondition(): BelongsTo
+    {
+        return $this->belongsTo(EquipmentCondition::class, 'equipment_condition_id');
     }
 
     public function supplier(): BelongsTo

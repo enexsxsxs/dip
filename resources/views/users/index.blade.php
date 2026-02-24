@@ -13,12 +13,6 @@
 
     <div class="py-12">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-            @if (session('status'))
-                <div class="mb-4 px-4 py-3 rounded-md bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-                    {{ session('status') }}
-                </div>
-            @endif
-
             <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-sm sm:rounded-lg">
                 <div class="p-6 text-gray-900 dark:text-gray-100">
                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
@@ -28,6 +22,7 @@
                                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">ФИО</th>
                                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Email</th>
                                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Роль</th>
+                                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Действия</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
@@ -37,10 +32,27 @@
                                     <td class="px-4 py-2">{{ $user->name ?: trim($user->last_name.' '.$user->first_name.' '.$user->patronymic) }}</td>
                                     <td class="px-4 py-2">{{ $user->email }}</td>
                                     <td class="px-4 py-2">{{ $user->role_label ?? '—' }}</td>
+                                    <td class="px-4 py-2 text-right space-x-2">
+                                        <a href="{{ route('users.edit', $user) }}"
+                                           class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300">
+                                            Редактировать
+                                        </a>
+                                        @if (!$user->isAdmin() && $user->id !== auth()->id())
+                                            <form method="POST" action="{{ route('users.destroy', $user) }}" class="inline-block"
+                                                  onsubmit="return confirm('Удалить этого пользователя?');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit"
+                                                        class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300">
+                                                    Удалить
+                                                </button>
+                                            </form>
+                                        @endif
+                                    </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="4" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
+                                    <td colspan="5" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
                                         Пользователей пока нет.
                                     </td>
                                 </tr>

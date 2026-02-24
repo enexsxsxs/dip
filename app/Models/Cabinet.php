@@ -10,6 +10,8 @@ class Cabinet extends Model
 {
     use HasFactory;
 
+    public $timestamps = false;
+
     protected $fillable = ['number'];
 
     public function equipment(): HasMany

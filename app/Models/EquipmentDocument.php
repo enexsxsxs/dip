@@ -10,6 +10,8 @@ class EquipmentDocument extends Model
 {
     use HasFactory;
 
+    public $timestamps = false;
+
     protected $fillable = ['document', 'name', 'type', 'uploaded_at', 'equipment_id'];
 
     protected function casts(): array

@@ -24,12 +24,18 @@ class User extends Authenticatable
 
     /** Названия ролей для отображения. */
     public const ROLE_LABELS = [
-        'admin' => 'Админ',
+        'admin' => 'Администратор',
         'user' => 'Пользователь',
         'senior_nurse' => 'Старшая медсестра',
         'nurse' => 'Медсестра',
         'accountant' => 'Бухгалтер',
     ];
+
+    /** Является ли пользователь администратором. */
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
 
     protected $fillable = [
         'name',

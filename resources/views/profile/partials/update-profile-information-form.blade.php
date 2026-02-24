@@ -47,6 +47,19 @@
             @endif
         </div>
 
+        <div>
+            <x-input-label value="{{ __('Роль') }}" />
+            <div class="mt-1 rounded-xl border border-teal-200 dark:border-teal-700 bg-teal-50 dark:bg-teal-900/30 border-l-4 border-l-teal-500 dark:border-l-teal-400 shadow-sm py-3 px-4">
+                <span class="inline-flex items-center font-semibold text-teal-800 dark:text-teal-200 text-sm">
+                    <svg class="w-4 h-4 mr-2 text-teal-600 dark:text-teal-400 shrink-0" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                        <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+                    </svg>
+                    {{ $user->role_label ?? '—' }}
+                </span>
+            </div>
+            <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">Ваша роль в системе. Изменить может только администратор.</p>
+        </div>
+
         <div class="flex items-center gap-4">
             <x-primary-button>{{ __('Save') }}</x-primary-button>
 

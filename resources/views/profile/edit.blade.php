@@ -13,11 +13,19 @@
                 </div>
             </div>
 
+            @if(auth()->user()?->isAdmin())
             <div class="p-4 sm:p-8 bg-white dark:bg-gray-800 shadow sm:rounded-lg">
                 <div class="max-w-xl">
                     @include('profile.partials.update-password-form')
                 </div>
             </div>
+            @else
+            <div class="p-4 sm:p-8 bg-white dark:bg-gray-800 shadow sm:rounded-lg">
+                <div class="max-w-xl">
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Смена пароля через профиль недоступна для вашей роли. Обратитесь к администратору.</p>
+                </div>
+            </div>
+            @endif
 
             <div class="p-4 sm:p-8 bg-white dark:bg-gray-800 shadow sm:rounded-lg">
                 <div class="max-w-xl">

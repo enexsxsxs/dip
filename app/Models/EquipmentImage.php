@@ -10,6 +10,8 @@ class EquipmentImage extends Model
 {
     use HasFactory;
 
+    public $timestamps = false;
+
     protected $fillable = ['image', 'equipment_id'];
 
     public function equipment(): BelongsTo
