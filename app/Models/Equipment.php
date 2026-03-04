@@ -39,6 +39,7 @@ class Equipment extends Model
         'registration_certificate_pdf',
         'supplier_id',
         'service_organization_id',
+        'writeoff_status',
     ];
 
     protected function casts(): array
@@ -48,6 +49,16 @@ class Equipment extends Model
             'date_accepted_to_accounting' => 'date',
             'ru_date' => 'date',
         ];
+    }
+
+    public function isWriteoffRequested(): bool
+    {
+        return $this->writeoff_status === 'requested';
+    }
+
+    public function isWrittenOff(): bool
+    {
+        return $this->writeoff_status === 'approved';
     }
 
     public function equipmentType(): BelongsTo
@@ -98,5 +109,10 @@ class Equipment extends Model
     public function history(): HasMany
     {
         return $this->hasMany(EquipmentHistory::class);
+    }
+
+    public function requests(): HasMany
+    {
+        return $this->hasMany(EquipmentRequest::class);
     }
 }

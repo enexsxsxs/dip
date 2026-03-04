@@ -1,10 +1,10 @@
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex items-center gap-4">
-            <a href="{{ route('equipment.index') }}" class="text-slate-600 hover:text-teal-700 font-medium">
+        <div class="flex flex-wrap items-center gap-4">
+            <a href="{{ route('equipment.index') }}" class="inline-flex items-center min-h-[48px] py-2 text-base font-semibold text-slate-600 hover:text-teal-700">
                 ← Список оборудования
             </a>
-            <h2 class="font-semibold text-xl text-slate-800 leading-tight">
+            <h2 class="font-semibold text-2xl text-slate-800 leading-tight">
                 Добавление оборудования
             </h2>
         </div>

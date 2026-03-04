@@ -43,5 +43,22 @@ class UserSeeder extends Seeder
                 'date_joined' => now(),
             ]
         );
+
+        // Старшая медсестра: просмотр и редактирование оборудования, добавление отчётов (без удаления оборудования и без справочников)
+        User::updateOrCreate(
+            ['email' => 'nurse@example.com'],
+            [
+                'name' => 'Старшая медсестра',
+                'first_name' => 'Старшая',
+                'last_name' => 'Медсестра',
+                'patronymic' => null,
+                'email' => 'nurse@example.com',
+                'password' => Hash::make('password'),
+                'role' => 'senior_nurse',
+                'is_active' => true,
+                'is_staff' => true,
+                'date_joined' => now(),
+            ]
+        );
     }
 }

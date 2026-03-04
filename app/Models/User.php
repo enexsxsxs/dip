@@ -37,6 +37,24 @@ class User extends Authenticatable
         return $this->role === 'admin';
     }
 
+    /** Является ли пользователь старшей медсестрой. */
+    public function isSeniorNurse(): bool
+    {
+        return $this->role === 'senior_nurse';
+    }
+
+    /** Может ли пользователь управлять оборудованием (просмотр, добавление, редактирование). */
+    public function canManageEquipment(): bool
+    {
+        return $this->role === 'admin' || $this->role === 'senior_nurse';
+    }
+
+    /** Может ли пользователь добавлять отчёты. */
+    public function canAddReports(): bool
+    {
+        return $this->role === 'admin' || $this->role === 'senior_nurse';
+    }
+
     protected $fillable = [
         'name',
         'username',
@@ -95,5 +113,10 @@ class User extends Authenticatable
     public function equipmentHistory(): HasMany
     {
         return $this->hasMany(EquipmentHistory::class);
+    }
+
+    public function equipmentRequests(): HasMany
+    {
+        return $this->hasMany(EquipmentRequest::class);
     }
 }

@@ -1,19 +1,19 @@
 @php
     $images = $equipment->images;
+    $docRegistration = $equipment->documents->first(fn($d) => in_array($d->type ?? '', ['registration_certificate', 'ru_scan']) || stripos($d->name ?? '', 'удостоверен') !== false || stripos($d->name ?? '', 'скан') !== false);
     $docInstruction = $equipment->documents->first(fn($d) => ($d->type ?? '') === 'instruction' || stripos($d->name ?? '', 'инструкц') !== false);
-    $docRuScan = $equipment->documents->first(fn($d) => ($d->type ?? '') === 'ru_scan' || stripos($d->name ?? '', 'скан') !== false || stripos($d->name ?? '', 'удостоверен') !== false);
-    $shownDocIds = array_filter([$docInstruction?->id, $docRuScan?->id]);
+    $docCommissioningAct = $equipment->documents->first(fn($d) => ($d->type ?? '') === 'commissioning_act' || stripos($d->name ?? '', 'акт ввода') !== false);
+    $shownDocIds = array_filter([$docRegistration?->id, $docInstruction?->id, $docCommissioningAct?->id]);
     $otherDocs = $equipment->documents->whereNotIn('id', $shownDocIds);
+    $docAccept = '.pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 @endphp
 <x-app-layout>
     <div class="max-w-5xl mx-auto">
         <div class="bg-white rounded-2xl shadow-xl border border-teal-100 overflow-hidden">
             {{-- Заголовок: название + кнопка закрыть --}}
-            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
-                <h1 class="text-xl font-semibold text-slate-800 truncate pr-4">{{ $equipment->name }}</h1>
-                <a href="{{ route('equipment.index') }}" class="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl text-slate-500 hover:bg-slate-200 hover:text-slate-700 transition" title="Закрыть">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                </a>
+            <div class="flex items-center justify-between px-6 py-5 border-b-2 border-slate-200 bg-slate-50">
+                <h1 class="text-2xl font-bold text-slate-800 truncate pr-4">{{ $equipment->name }}</h1>
+                <a href="{{ route('equipment.index') }}" class="shrink-0 flex items-center justify-center min-h-[48px] min-w-[48px] rounded-xl text-slate-500 hover:bg-slate-200 hover:text-slate-700 transition text-base font-medium" title="Закрыть">Закрыть</a>
             </div>
 
             <div class="flex flex-col lg:flex-row">
@@ -47,62 +47,87 @@
                         @endif
                     </div>
 
-                    {{-- Документы PDF --}}
+                    {{-- Документы (PDF, Word, Excel) --}}
                     <div>
-                        <h3 class="text-sm font-semibold text-slate-700 mb-3">Документы PDF</h3>
-                        <div class="space-y-3">
-                            <div class="rounded-xl border border-slate-200 p-3 bg-slate-50">
-                                <p class="text-xs font-medium text-slate-500 mb-1">1. Инструкция</p>
-                                @if($docInstruction)
-                                    <a href="{{ asset('storage/' . $docInstruction->document) }}" target="_blank" rel="noopener" download class="text-sm text-teal-600 hover:underline">Скачать {{ $docInstruction->name }}</a>
-                                    @if(auth()->user()?->isAdmin())
-                                        <form method="post" action="{{ route('equipment.documents.store', $equipment) }}" enctype="multipart/form-data" class="mt-2 flex flex-wrap items-center gap-2">
+                        <h3 class="text-lg font-bold text-slate-700 mb-4">Документы</h3>
+                        <p class="text-base text-slate-500 mb-3">Форматы: PDF, Word (.doc, .docx), Excel (.xls, .xlsx). Можно загружать и скачивать.</p>
+                        <div class="space-y-4">
+                            <div class="rounded-xl border-2 border-slate-200 p-4 bg-slate-50">
+                                <p class="text-base font-semibold text-slate-600 mb-2">1. Регистрационное удостоверение</p>
+                                @if($docRegistration)
+                                    <a href="{{ asset('storage/' . $docRegistration->document) }}" target="_blank" rel="noopener" download class="text-base font-medium text-teal-600 hover:underline">Скачать {{ $docRegistration->name }}</a>
+                                    @if(auth()->user()?->canManageEquipment())
+                                        <form method="post" action="{{ route('equipment.documents.store', $equipment) }}" enctype="multipart/form-data" class="mt-3 flex flex-wrap items-center gap-3">
                                             @csrf
-                                            <input type="hidden" name="type" value="instruction">
-                                            <input type="file" name="document" accept=".pdf,application/pdf" class="text-sm text-slate-600 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-teal-50 file:text-teal-700 file:text-xs">
-                                            <button type="submit" class="text-xs font-medium text-teal-600 hover:text-teal-800">Заменить</button>
+                                            <input type="hidden" name="type" value="registration_certificate">
+                                            <input type="file" name="document" accept="{{ $docAccept }}" class="text-base file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-teal-50 file:text-teal-700">
+                                            <button type="submit" class="min-h-[44px] px-4 py-2 rounded-xl text-base font-semibold text-teal-700 bg-teal-100 hover:bg-teal-200">Заменить</button>
                                         </form>
                                     @endif
                                 @else
                                     <p class="text-sm text-slate-400">Нет загруженных документов</p>
-                                    @if(auth()->user()?->isAdmin())
-                                        <form method="post" action="{{ route('equipment.documents.store', $equipment) }}" enctype="multipart/form-data" class="mt-2 flex flex-wrap items-center gap-2">
+                                    @if(auth()->user()?->canManageEquipment())
+                                        <form method="post" action="{{ route('equipment.documents.store', $equipment) }}" enctype="multipart/form-data" class="mt-3 flex flex-wrap items-center gap-3">
                                             @csrf
-                                            <input type="hidden" name="type" value="instruction">
-                                            <input type="file" name="document" accept=".pdf,application/pdf" required class="text-sm text-slate-600 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-teal-50 file:text-teal-700 file:text-xs">
-                                            <button type="submit" class="text-xs font-medium text-teal-600 hover:text-teal-800">Загрузить</button>
+                                            <input type="hidden" name="type" value="registration_certificate">
+                                            <input type="file" name="document" accept="{{ $docAccept }}" required class="text-base file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-teal-50 file:text-teal-700">
+                                            <button type="submit" class="min-h-[44px] px-4 py-2 rounded-xl text-base font-semibold text-teal-700 bg-teal-100 hover:bg-teal-200">Загрузить</button>
                                         </form>
                                     @endif
                                 @endif
                             </div>
-                            <div class="rounded-xl border border-slate-200 p-3 bg-slate-50">
-                                <p class="text-xs font-medium text-slate-500 mb-1">2. Скан РУ</p>
-                                @if($docRuScan)
-                                    <a href="{{ asset('storage/' . $docRuScan->document) }}" target="_blank" rel="noopener" download class="text-sm text-teal-600 hover:underline">Скачать {{ $docRuScan->name }}</a>
-                                    @if(auth()->user()?->isAdmin())
-                                        <form method="post" action="{{ route('equipment.documents.store', $equipment) }}" enctype="multipart/form-data" class="mt-2 flex flex-wrap items-center gap-2">
+                            <div class="rounded-xl border-2 border-slate-200 p-4 bg-slate-50">
+                                <p class="text-base font-semibold text-slate-600 mb-2">2. Инструкция на русском языке</p>
+                                @if($docInstruction)
+                                    <a href="{{ asset('storage/' . $docInstruction->document) }}" target="_blank" rel="noopener" download class="text-base font-medium text-teal-600 hover:underline">Скачать {{ $docInstruction->name }}</a>
+                                    @if(auth()->user()?->canManageEquipment())
+                                        <form method="post" action="{{ route('equipment.documents.store', $equipment) }}" enctype="multipart/form-data" class="mt-3 flex flex-wrap items-center gap-3">
                                             @csrf
-                                            <input type="hidden" name="type" value="ru_scan">
-                                            <input type="file" name="document" accept=".pdf,application/pdf" class="text-sm text-slate-600 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-teal-50 file:text-teal-700 file:text-xs">
-                                            <button type="submit" class="text-xs font-medium text-teal-600 hover:text-teal-800">Заменить</button>
+                                            <input type="hidden" name="type" value="instruction">
+                                            <input type="file" name="document" accept="{{ $docAccept }}" class="text-base file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-teal-50 file:text-teal-700">
+                                            <button type="submit" class="min-h-[44px] px-4 py-2 rounded-xl text-base font-semibold text-teal-700 bg-teal-100 hover:bg-teal-200">Заменить</button>
                                         </form>
                                     @endif
                                 @else
-                                    <p class="text-sm text-slate-400">Нет загруженных документов</p>
-                                    @if(auth()->user()?->isAdmin())
-                                        <form method="post" action="{{ route('equipment.documents.store', $equipment) }}" enctype="multipart/form-data" class="mt-2 flex flex-wrap items-center gap-2">
+                                    <p class="text-base text-slate-400">Нет загруженных документов</p>
+                                    @if(auth()->user()?->canManageEquipment())
+                                        <form method="post" action="{{ route('equipment.documents.store', $equipment) }}" enctype="multipart/form-data" class="mt-3 flex flex-wrap items-center gap-3">
                                             @csrf
-                                            <input type="hidden" name="type" value="ru_scan">
-                                            <input type="file" name="document" accept=".pdf,application/pdf" required class="text-sm text-slate-600 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-teal-50 file:text-teal-700 file:text-xs">
-                                            <button type="submit" class="text-xs font-medium text-teal-600 hover:text-teal-800">Загрузить</button>
+                                            <input type="hidden" name="type" value="instruction">
+                                            <input type="file" name="document" accept="{{ $docAccept }}" required class="text-base file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-teal-50 file:text-teal-700">
+                                            <button type="submit" class="min-h-[44px] px-4 py-2 rounded-xl text-base font-semibold text-teal-700 bg-teal-100 hover:bg-teal-200">Загрузить</button>
+                                        </form>
+                                    @endif
+                                @endif
+                            </div>
+                            <div class="rounded-xl border-2 border-slate-200 p-4 bg-slate-50">
+                                <p class="text-base font-semibold text-slate-600 mb-2">3. Акт ввода в эксплуатацию</p>
+                                @if($docCommissioningAct)
+                                    <a href="{{ asset('storage/' . $docCommissioningAct->document) }}" target="_blank" rel="noopener" download class="text-base font-medium text-teal-600 hover:underline">Скачать {{ $docCommissioningAct->name }}</a>
+                                    @if(auth()->user()?->canManageEquipment())
+                                        <form method="post" action="{{ route('equipment.documents.store', $equipment) }}" enctype="multipart/form-data" class="mt-3 flex flex-wrap items-center gap-3">
+                                            @csrf
+                                            <input type="hidden" name="type" value="commissioning_act">
+                                            <input type="file" name="document" accept="{{ $docAccept }}" class="text-base file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-teal-50 file:text-teal-700">
+                                            <button type="submit" class="min-h-[44px] px-4 py-2 rounded-xl text-base font-semibold text-teal-700 bg-teal-100 hover:bg-teal-200">Заменить</button>
+                                        </form>
+                                    @endif
+                                @else
+                                    <p class="text-base text-slate-400">Нет загруженных документов</p>
+                                    @if(auth()->user()?->canManageEquipment())
+                                        <form method="post" action="{{ route('equipment.documents.store', $equipment) }}" enctype="multipart/form-data" class="mt-3 flex flex-wrap items-center gap-3">
+                                            @csrf
+                                            <input type="hidden" name="type" value="commissioning_act">
+                                            <input type="file" name="document" accept="{{ $docAccept }}" required class="text-base file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-teal-50 file:text-teal-700">
+                                            <button type="submit" class="min-h-[44px] px-4 py-2 rounded-xl text-base font-semibold text-teal-700 bg-teal-100 hover:bg-teal-200">Загрузить</button>
                                         </form>
                                     @endif
                                 @endif
                             </div>
                             @if($otherDocs->isNotEmpty())
                                 @foreach($otherDocs as $doc)
-                                    <div class="rounded-xl border border-slate-200 p-3 bg-slate-50">
-                                        <a href="{{ asset('storage/' . $doc->document) }}" target="_blank" rel="noopener" class="text-sm text-teal-600 hover:underline">{{ $doc->name }}</a>
+                                    <div class="rounded-xl border-2 border-slate-200 p-4 bg-slate-50">
+                                        <a href="{{ asset('storage/' . $doc->document) }}" target="_blank" rel="noopener" download class="text-base font-medium text-teal-600 hover:underline">Скачать {{ $doc->name }}</a>
                                     </div>
                                 @endforeach
                             @endif
@@ -110,10 +135,10 @@
                     </div>
                 </div>
 
-                {{-- Правая колонка: характеристики --}}
+                {{-- Правая колонка: характеристики + заявки --}}
                 <div class="lg:w-1/3 p-6 bg-slate-50/50">
-                    <h3 class="text-sm font-semibold text-slate-700 mb-4">Характеристики</h3>
-                    <dl class="space-y-3 text-sm">
+                    <h3 class="text-lg font-bold text-slate-700 mb-4">Характеристики</h3>
+                    <dl class="space-y-3 text-base">
                         <div class="flex justify-between gap-4">
                             <dt class="text-slate-500 shrink-0">Наименование</dt>
                             <dd class="text-slate-800 text-right">{{ $equipment->name ?: '—' }}</dd>
@@ -170,10 +195,87 @@
                             <dt class="text-slate-500 shrink-0">Поставщик</dt>
                             <dd class="text-slate-800 text-right">{{ $equipment->supplier?->name ?? '—' }}</dd>
                         </div>
+                        <div class="flex justify-between gap-4">
+                            <dt class="text-slate-500 shrink-0">Статус списания</dt>
+                            <dd class="text-slate-800 text-right">
+                                @if($equipment->writeoff_status === 'approved')
+                                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold bg-red-50 text-red-700 border-2 border-red-200">
+                                        Списано
+                                    </span>
+                                @elseif($equipment->writeoff_status === 'requested')
+                                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold bg-amber-50 text-amber-700 border-2 border-amber-200">
+                                        Запрошено списание
+                                    </span>
+                                @else
+                                    <span class="text-sm text-slate-400">—</span>
+                                @endif
+                            </dd>
+                        </div>
                     </dl>
-                    @if(auth()->user()?->isAdmin())
-                        <div class="mt-6 pt-4 border-t border-slate-200">
-                            <a href="{{ route('equipment.edit', $equipment) }}" class="inline-flex items-center px-4 py-2 rounded-xl text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 transition">Редактировать</a>
+
+                    @if(auth()->user()?->canManageEquipment())
+                        <div class="mt-6 pt-4 border-t-2 border-slate-200 space-y-4">
+                            <a href="{{ route('equipment.edit', $equipment) }}" class="inline-flex items-center min-h-[48px] px-5 py-3 rounded-xl text-base font-semibold text-white bg-teal-600 hover:bg-teal-700 transition shadow-md">Редактировать</a>
+                        </div>
+                    @endif
+
+                    @php
+                        $canSendRequests = auth()->user()?->isSeniorNurse();
+                        $departmentsList = ($departments ?? collect())->filter(fn($d) => $d->id !== $equipment->department_id);
+                    @endphp
+
+                    @if($canSendRequests)
+                        <div class="mt-6 pt-4 border-t-2 border-slate-200 space-y-6">
+                            {{-- Заявка на списание --}}
+                            @if(!$equipment->isWrittenOff())
+                                <div>
+                                    <h4 class="text-base font-bold text-slate-700 mb-3">Заявка на списание</h4>
+                                    <form method="POST" action="{{ route('equipment.requests.writeoff', $equipment) }}" enctype="multipart/form-data" class="space-y-3">
+                                        @csrf
+                                        <label for="writeoff_comment" class="block text-base font-semibold text-slate-600 mb-1">
+                                            Причина списания <span class="text-red-500">*</span>
+                                        </label>
+                                        <textarea id="writeoff_comment" name="comment" rows="3" required class="w-full rounded-xl border-2 border-slate-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-base py-2 px-3" placeholder="Опишите, почему оборудование нужно списать (неисправность, устарело и т.п.)">{{ old('comment') }}</textarea>
+                                        <div>
+                                            <label for="writeoff_photo" class="block text-base font-semibold text-slate-600 mb-1">
+                                                Фото причины (необязательно)
+                                            </label>
+                                            <input id="writeoff_photo" type="file" name="photo" accept="image/jpeg,image/png,image/gif,image/webp"
+                                                   class="block w-full text-sm text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100">
+                                            <p class="mt-1 text-xs text-slate-500">Допустимые форматы: JPEG, PNG, GIF, WebP. Максимум 5 МБ.</p>
+                                        </div>
+                                        <button type="submit" class="mt-2 inline-flex items-center min-h-[48px] px-5 py-3 rounded-xl text-base font-semibold text-white bg-red-600 hover:bg-red-700 transition">
+                                            Отправить заявку на списание
+                                        </button>
+                                    </form>
+                                </div>
+                            @endif
+
+                            {{-- Заявка на перемещение --}}
+                            <div>
+                                <h4 class="text-base font-bold text-slate-700 mb-3">Заявка на перемещение</h4>
+                                <form method="POST" action="{{ route('equipment.requests.move', $equipment) }}" class="space-y-3">
+                                    @csrf
+                                    <div>
+                                        <label for="to_department_id" class="block text-base font-semibold text-slate-600 mb-1">Новое отделение</label>
+                                        <select id="to_department_id" name="to_department_id" required class="w-full rounded-xl border-2 border-slate-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-base py-2.5 px-3">
+                                            <option value="">Выберите отделение</option>
+                                            @foreach($departmentsList as $dept)
+                                                <option value="{{ $dept->id }}" @selected(old('to_department_id') == $dept->id)>
+                                                    {{ $dept->name }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label for="move_comment" class="block text-base font-semibold text-slate-600 mb-1">Комментарий (опционально)</label>
+                                        <textarea id="move_comment" name="comment" rows="2" class="w-full rounded-xl border-2 border-slate-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-base py-2 px-3" placeholder="Причина или детали перемещения...">{{ old('comment') }}</textarea>
+                                    </div>
+                                    <button type="submit" class="mt-2 inline-flex items-center min-h-[48px] px-5 py-3 rounded-xl text-base font-semibold text-white bg-teal-600 hover:bg-teal-700 transition">
+                                        Отправить заявку на перемещение
+                                    </button>
+                                </form>
+                            </div>
                         </div>
                     @endif
                 </div>

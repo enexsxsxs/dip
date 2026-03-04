@@ -5,6 +5,7 @@ use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\EquipmentTypeController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\EquipmentRequestController;
 use App\Http\Controllers\UserController;
 use App\Models\Equipment;
 use App\Models\Department;
@@ -28,6 +29,19 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+    // Оборудование: добавление и редактирование — администратор и старшая медсестра
+    Route::middleware('equipment.manage')->group(function () {
+        Route::get('/equipment/create', [EquipmentController::class, 'create'])->name('equipment.create');
+        Route::post('/equipment', [EquipmentController::class, 'store'])->name('equipment.store');
+        Route::post('/equipment/{equipment}/documents', [EquipmentController::class, 'storeDocument'])->name('equipment.documents.store');
+        Route::get('/equipment/{equipment}/edit', [EquipmentController::class, 'edit'])->name('equipment.edit');
+        Route::put('/equipment/{equipment}', [EquipmentController::class, 'update'])->name('equipment.update');
+
+        // Заявки от старшей медсестры
+        Route::post('/equipment/{equipment}/requests/writeoff', [EquipmentRequestController::class, 'storeWriteoff'])->name('equipment.requests.writeoff');
+        Route::post('/equipment/{equipment}/requests/move', [EquipmentRequestController::class, 'storeMove'])->name('equipment.requests.move');
+    });
+
     Route::middleware('admin')->group(function () {
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
@@ -36,12 +50,13 @@ Route::middleware('auth')->group(function () {
         Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
 
-        Route::get('/equipment/create', [EquipmentController::class, 'create'])->name('equipment.create');
-        Route::post('/equipment', [EquipmentController::class, 'store'])->name('equipment.store');
-        Route::post('/equipment/{equipment}/documents', [EquipmentController::class, 'storeDocument'])->name('equipment.documents.store');
-        Route::get('/equipment/{equipment}/edit', [EquipmentController::class, 'edit'])->name('equipment.edit');
-        Route::put('/equipment/{equipment}', [EquipmentController::class, 'update'])->name('equipment.update');
         Route::delete('/equipment/{equipment}', [EquipmentController::class, 'destroy'])->name('equipment.destroy');
+
+        // Заявки: список и действия
+        Route::get('/equipment-requests', [EquipmentRequestController::class, 'index'])->name('equipment-requests.index');
+        Route::post('/equipment/{equipment}/approve-writeoff', [EquipmentRequestController::class, 'approveWriteoff'])->name('equipment.requests.approveWriteoff');
+        Route::post('/equipment-requests/{equipmentRequest}/approve-move', [EquipmentRequestController::class, 'approveMove'])->name('equipment-requests.approveMove');
+        Route::post('/equipment-requests/{equipmentRequest}/reject', [EquipmentRequestController::class, 'reject'])->name('equipment-requests.reject');
 
         Route::get('/equipment-types', [EquipmentTypeController::class, 'index'])->name('equipment-types.index');
         Route::post('/equipment-types', [EquipmentTypeController::class, 'store'])->name('equipment-types.store');

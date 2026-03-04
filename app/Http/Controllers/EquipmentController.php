@@ -193,21 +193,34 @@ class EquipmentController extends Controller
             'supplier',
             'serviceOrganization',
         ]);
-        return view('equipment.show', ['equipment' => $equipment]);
+
+        $departments = Department::orderBy('name')->get(['id', 'name']);
+
+        return view('equipment.show', [
+            'equipment' => $equipment,
+            'departments' => $departments,
+        ]);
     }
 
     /**
-     * Загрузка PDF-документа с карточки оборудования (только для админа).
+     * Загрузка документа с карточки оборудования (PDF, Word, Excel).
      */
     public function storeDocument(Request $request, Equipment $equipment): RedirectResponse
     {
         $request->validate([
-            'type' => 'required|in:instruction,ru_scan',
-            'document' => 'required|file|mimes:pdf|max:15360',
+            'type' => 'required|in:instruction,registration_certificate,commissioning_act,ru_scan',
+            'document' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
+        ], [
+            'document.mimes' => 'Допустимые форматы: PDF, Word (.doc, .docx), Excel (.xls, .xlsx).',
         ]);
         $type = $request->input('type');
         $file = $request->file('document');
-        $labels = ['instruction' => 'Инструкция', 'ru_scan' => 'Скан РУ'];
+        $labels = [
+            'instruction' => 'Инструкция на русском языке',
+            'registration_certificate' => 'Регистрационное удостоверение',
+            'commissioning_act' => 'Акт ввода в эксплуатацию',
+            'ru_scan' => 'Регистрационное удостоверение',
+        ];
         $equipment->documents()->where('type', $type)->get()->each(function (EquipmentDocument $doc) {
             Storage::disk('public')->delete($doc->document);
             $doc->delete();
@@ -253,8 +266,9 @@ class EquipmentController extends Controller
             'images.max' => 'Максимум 5 фотографий.',
         ]);
         $validated =         $request->validate([
-            'document_instruction' => 'nullable|file|mimes:pdf|max:15360',
-            'document_ru_scan' => 'nullable|file|mimes:pdf|max:15360',
+            'document_registration_certificate' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
+            'document_instruction' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
+            'document_commissioning_act' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
             'number' => 'required|integer|min:1|unique:equipment,number',
             'equipment_type_id' => 'nullable|exists:equipment_types,id',
             'name' => 'required|string|max:255',
@@ -280,6 +294,10 @@ class EquipmentController extends Controller
             'registration_certificate_pdf' => 'nullable|string|max:100',
             'supplier_id' => 'nullable|exists:suppliers,id',
             'service_organization_id' => 'nullable|exists:service_organizations,id',
+        ], [
+            'document_registration_certificate.required' => 'Загрузите регистрационное удостоверение.',
+            'document_instruction.required' => 'Загрузите инструкцию на русском языке.',
+            'document_commissioning_act.required' => 'Загрузите акт ввода в эксплуатацию.',
         ]);
 
         $validated['production_date'] = $request->filled('production_date') ? $request->input('production_date') : null;
@@ -343,8 +361,9 @@ class EquipmentController extends Controller
             'delete_images.*' => 'exists:equipment_images,id',
         ]);
         $validated =         $request->validate([
-            'document_instruction' => 'nullable|file|mimes:pdf|max:15360',
-            'document_ru_scan' => 'nullable|file|mimes:pdf|max:15360',
+            'document_registration_certificate' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
+            'document_instruction' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
+            'document_commissioning_act' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
             'number' => 'required|integer|min:1|unique:equipment,number,' . $equipment->id,
             'equipment_type_id' => 'nullable|exists:equipment_types,id',
             'name' => 'required|string|max:255',
@@ -403,7 +422,12 @@ class EquipmentController extends Controller
 
     private function storeEquipmentDocuments(Request $request, Equipment $equipment): void
     {
-        foreach (['instruction' => ['document_instruction', 'Инструкция'], 'ru_scan' => ['document_ru_scan', 'Скан РУ']] as $type => [$key, $label]) {
+        $documentMap = [
+            'registration_certificate' => ['document_registration_certificate', 'Регистрационное удостоверение'],
+            'instruction' => ['document_instruction', 'Инструкция на русском языке'],
+            'commissioning_act' => ['document_commissioning_act', 'Акт ввода в эксплуатацию'],
+        ];
+        foreach ($documentMap as $type => [$key, $label]) {
             $file = $request->file($key);
             if (!$file || !$file->isValid()) {
                 continue;

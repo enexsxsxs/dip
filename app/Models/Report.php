@@ -6,35 +6,22 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class EquipmentHistory extends Model
+class Report extends Model
 {
     use HasFactory;
 
-    protected $table = 'equipment_history';
-
-    public $timestamps = false;
-
     protected $fillable = [
-        'action',
-        'field_name',
-        'old_value',
-        'new_value',
-        'timestamp',
-        'details',
-        'equipment_id',
+        'title',
+        'body',
+        'report_date',
         'user_id',
     ];
 
     protected function casts(): array
     {
         return [
-            'timestamp' => 'datetime',
+            'report_date' => 'date',
         ];
-    }
-
-    public function equipment(): BelongsTo
-    {
-        return $this->belongsTo(Equipment::class);
     }
 
     public function user(): BelongsTo
