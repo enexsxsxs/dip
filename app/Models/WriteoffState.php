@@ -4,18 +4,17 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
-class EquipmentType extends Model
+class WriteoffState extends Model
 {
-    use SoftDeletes;
-
     public $timestamps = false;
 
-    protected $fillable = ['name'];
+    protected $fillable = [
+        'code',
+    ];
 
     public function equipment(): HasMany
     {
-        return $this->hasMany(Equipment::class, 'equipment_type_id');
+        return $this->hasMany(Equipment::class, 'writeoff_state_id');
     }
 }

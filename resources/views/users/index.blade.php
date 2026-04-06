@@ -22,6 +22,7 @@
                                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">ФИО</th>
                                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Email</th>
                                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Роль</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Статус</th>
                                 <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Действия</th>
                             </tr>
                         </thead>
@@ -32,27 +33,46 @@
                                     <td class="px-4 py-2">{{ $user->name ?: trim($user->last_name.' '.$user->first_name.' '.$user->patronymic) }}</td>
                                     <td class="px-4 py-2">{{ $user->email }}</td>
                                     <td class="px-4 py-2">{{ $user->role_label ?? '—' }}</td>
+                                    <td class="px-4 py-2">
+                                        @if ($user->is_active)
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200">Работает</span>
+                                        @else
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-200">Уволен</span>
+                                        @endif
+                                    </td>
                                     <td class="px-4 py-2 text-right space-x-2">
                                         <a href="{{ route('users.edit', $user) }}"
                                            class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300">
                                             Редактировать
                                         </a>
                                         @if (!$user->isAdmin() && $user->id !== auth()->id())
-                                            <form method="POST" action="{{ route('users.destroy', $user) }}" class="inline-block"
-                                                  onsubmit="return confirm('Удалить этого пользователя?');">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit"
-                                                        class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300">
-                                                    Удалить
-                                                </button>
-                                            </form>
+                                            @if ($user->is_active)
+                                                <form method="POST" action="{{ route('users.destroy', $user) }}" class="inline-block"
+                                                      onsubmit="return confirm('Уволить сотрудника? Вход в систему будет отключён, запись в базе сохранится.');">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit"
+                                                            class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300">
+                                                        Уволить
+                                                    </button>
+                                                </form>
+                                            @else
+                                                <form method="POST" action="{{ route('users.restore', $user) }}" class="inline-block"
+                                                      onsubmit="return confirm('Восстановить доступ сотрудника в систему?');">
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <button type="submit"
+                                                            class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300">
+                                                        Восстановить
+                                                    </button>
+                                                </form>
+                                            @endif
                                         @endif
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="5" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
+                                    <td colspan="6" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
                                         Пользователей пока нет.
                                     </td>
                                 </tr>

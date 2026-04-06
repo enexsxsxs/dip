@@ -49,6 +49,15 @@ class LoginRequest extends FormRequest
             ]);
         }
 
+        $user = Auth::user();
+        if ($user && ($user->is_active === false)) {
+            Auth::logout();
+
+            throw ValidationException::withMessages([
+                'email' => 'Доступ отключён. Учётная запись уволена или заблокирована администратором.',
+            ]);
+        }
+
         RateLimiter::clear($this->throttleKey());
     }
 

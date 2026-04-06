@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -11,6 +12,7 @@ return new class extends Migration
         Schema::create('equipment_types', function (Blueprint $table) {
             $table->id();
             $table->string('name', 255);
+            $table->softDeletes();
         });
 
         Schema::create('equipment_conditions', function (Blueprint $table) {
@@ -18,9 +20,22 @@ return new class extends Migration
             $table->string('name', 100);
         });
 
-        Schema::create('equipment', function (Blueprint $table) {
+        Schema::create('writeoff_states', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('number')->unique();
+            $table->string('code', 32)->unique();
+        });
+
+        DB::table('writeoff_states')->insert([
+            ['code' => 'none'],
+            ['code' => 'requested'],
+            ['code' => 'approved'],
+        ]);
+
+        $noneId = (int) DB::table('writeoff_states')->where('code', 'none')->value('id');
+
+        Schema::create('equipment', function (Blueprint $table) use ($noneId) {
+            $table->id();
+            $table->unsignedBigInteger('number');
             $table->foreignId('equipment_type_id')->nullable()->constrained('equipment_types')->nullOnDelete();
             $table->string('name', 255);
             $table->string('serial_number', 100)->nullable();
@@ -41,10 +56,11 @@ return new class extends Migration
             $table->string('valid_to', 20)->nullable();
             $table->string('verification_period', 55)->nullable();
             $table->string('last_verification_date', 20)->nullable();
-            $table->string('instruction_pdf', 100)->nullable();
-            $table->string('registration_certificate_pdf', 100)->nullable();
             $table->foreignId('supplier_id')->nullable()->constrained('suppliers')->nullOnDelete();
             $table->foreignId('service_organization_id')->nullable()->constrained('service_organizations')->nullOnDelete();
+            $table->foreignId('writeoff_state_id')->default($noneId)->constrained('writeoff_states')->restrictOnDelete();
+            $table->softDeletes();
+            $table->index('number');
         });
     }
 
@@ -53,5 +69,6 @@ return new class extends Migration
         Schema::dropIfExists('equipment');
         Schema::dropIfExists('equipment_conditions');
         Schema::dropIfExists('equipment_types');
+        Schema::dropIfExists('writeoff_states');
     }
 };

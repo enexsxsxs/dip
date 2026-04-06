@@ -11,6 +11,7 @@ return new class extends Migration
         Schema::create('cabinets', function (Blueprint $table) {
             $table->id();
             $table->string('number', 55);
+            $table->softDeletes();
         });
     }
 

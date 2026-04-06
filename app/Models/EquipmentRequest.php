@@ -20,6 +20,8 @@ class EquipmentRequest extends Model
     protected $fillable = [
         'equipment_id',
         'user_id',
+        'request_type_id',
+        'request_status_id',
         'type',
         'status',
         'from_department_id',
@@ -27,6 +29,56 @@ class EquipmentRequest extends Model
         'comment',
         'photo',
     ];
+
+    public function getTypeAttribute($value): ?string
+    {
+        if (! array_key_exists('request_type_id', $this->attributes) || $this->attributes['request_type_id'] === null) {
+            return null;
+        }
+        if ($this->relationLoaded('requestType')) {
+            return $this->requestType?->code;
+        }
+
+        return EquipmentRequestType::query()->whereKey($this->attributes['request_type_id'])->value('code');
+    }
+
+    public function setTypeAttribute(?string $value): void
+    {
+        unset($this->attributes['type']);
+        $this->attributes['request_type_id'] = $value
+            ? EquipmentRequestType::query()->where('code', $value)->value('id')
+            : null;
+    }
+
+    public function getStatusAttribute($value): ?string
+    {
+        if (! array_key_exists('request_status_id', $this->attributes) || $this->attributes['request_status_id'] === null) {
+            return null;
+        }
+        if ($this->relationLoaded('requestStatus')) {
+            return $this->requestStatus?->code;
+        }
+
+        return EquipmentRequestStatus::query()->whereKey($this->attributes['request_status_id'])->value('code');
+    }
+
+    public function setStatusAttribute(?string $value): void
+    {
+        unset($this->attributes['status']);
+        $this->attributes['request_status_id'] = $value
+            ? EquipmentRequestStatus::query()->where('code', $value)->value('id')
+            : null;
+    }
+
+    public function requestType(): BelongsTo
+    {
+        return $this->belongsTo(EquipmentRequestType::class, 'request_type_id');
+    }
+
+    public function requestStatus(): BelongsTo
+    {
+        return $this->belongsTo(EquipmentRequestStatus::class, 'request_status_id');
+    }
 
     public function equipment(): BelongsTo
     {
@@ -48,4 +100,3 @@ class EquipmentRequest extends Model
         return $this->belongsTo(Department::class, 'to_department_id');
     }
 }
-

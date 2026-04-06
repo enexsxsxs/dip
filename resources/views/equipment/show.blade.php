@@ -9,6 +9,11 @@
 @endphp
 <x-app-layout>
     <div class="max-w-5xl mx-auto">
+        @if (session('warning'))
+            <div class="mb-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 px-4 py-3 text-sm" role="alert">
+                {{ session('warning') }}
+            </div>
+        @endif
         <div class="bg-white rounded-2xl shadow-xl border border-teal-100 overflow-hidden">
             {{-- Заголовок: название + кнопка закрыть --}}
             <div class="flex items-center justify-between px-6 py-5 border-b-2 border-slate-200 bg-slate-50">

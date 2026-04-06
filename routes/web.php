@@ -6,6 +6,7 @@ use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\EquipmentTypeController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\EquipmentRequestController;
+use App\Http\Controllers\ActivityArchiveController;
 use App\Http\Controllers\UserController;
 use App\Models\Equipment;
 use App\Models\Department;
@@ -36,6 +37,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/equipment/{equipment}/documents', [EquipmentController::class, 'storeDocument'])->name('equipment.documents.store');
         Route::get('/equipment/{equipment}/edit', [EquipmentController::class, 'edit'])->name('equipment.edit');
         Route::put('/equipment/{equipment}', [EquipmentController::class, 'update'])->name('equipment.update');
+        Route::delete('/equipment/{equipment}', [EquipmentController::class, 'destroy'])->name('equipment.destroy');
 
         // Заявки от старшей медсестры
         Route::post('/equipment/{equipment}/requests/writeoff', [EquipmentRequestController::class, 'storeWriteoff'])->name('equipment.requests.writeoff');
@@ -49,8 +51,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('users.edit');
         Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
-
-        Route::delete('/equipment/{equipment}', [EquipmentController::class, 'destroy'])->name('equipment.destroy');
+        Route::patch('/users/{user}/restore', [UserController::class, 'restore'])->name('users.restore');
 
         // Заявки: список и действия
         Route::get('/equipment-requests', [EquipmentRequestController::class, 'index'])->name('equipment-requests.index');
@@ -69,6 +70,16 @@ Route::middleware('auth')->group(function () {
         Route::get('/cabinets', [CabinetController::class, 'index'])->name('cabinets.index');
         Route::post('/cabinets', [CabinetController::class, 'store'])->name('cabinets.store');
         Route::delete('/cabinets/{cabinet}', [CabinetController::class, 'destroy'])->name('cabinets.destroy');
+
+        Route::get('/admin/activity-archive', [ActivityArchiveController::class, 'index'])->name('admin.activity-archive');
+        Route::post('/admin/activity-archive/clear', [ActivityArchiveController::class, 'clear'])->name('admin.activity-archive.clear');
+        Route::post('/admin/activity-archive/clear-filtered', [ActivityArchiveController::class, 'clearFiltered'])->name('admin.activity-archive.clear-filtered');
+        Route::post('/admin/activity-archive/delete-selected', [ActivityArchiveController::class, 'deleteSelected'])->name('admin.activity-archive.delete-selected');
+        Route::post('/admin/activity-archive/revision/{activityLog}/restore', [ActivityArchiveController::class, 'restoreRevision'])->name('admin.activity-archive.restore-revision');
+        Route::post('/admin/activity-archive/equipment-type/{id}/restore', [ActivityArchiveController::class, 'restoreEquipmentType'])->name('admin.activity-archive.restore-equipment-type')->whereNumber('id');
+        Route::post('/admin/activity-archive/department/{id}/restore', [ActivityArchiveController::class, 'restoreDepartment'])->name('admin.activity-archive.restore-department')->whereNumber('id');
+        Route::post('/admin/activity-archive/cabinet/{id}/restore', [ActivityArchiveController::class, 'restoreCabinet'])->name('admin.activity-archive.restore-cabinet')->whereNumber('id');
+        Route::post('/admin/activity-archive/{id}/restore', [ActivityArchiveController::class, 'restore'])->name('admin.activity-archive.restore');
     });
 });
 

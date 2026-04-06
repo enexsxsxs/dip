@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\Department;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,7 +19,15 @@ class DepartmentController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $request->validate(['name' => 'required|string|max:155']);
-        Department::create(['name' => $request->input('name')]);
+        $department = Department::create(['name' => $request->input('name')]);
+        ActivityLog::record(
+            Department::class,
+            $department->id,
+            'created',
+            $department->name,
+            'Добавлен отдел.',
+        );
+
         return redirect()->route('departments.index')->with('success', 'Отдел добавлен.');
     }
 
@@ -27,7 +36,17 @@ class DepartmentController extends Controller
         if ($department->equipment()->exists()) {
             return redirect()->route('departments.index')->with('error', 'Нельзя удалить отдел, к которому привязано оборудование.');
         }
+        $label = $department->name;
+        $id = $department->id;
         $department->delete();
-        return redirect()->route('departments.index')->with('deleted', 'Отдел удалён.');
+        ActivityLog::record(
+            Department::class,
+            $id,
+            'deleted',
+            $label,
+            'Отдел удалён из справочника.',
+        );
+
+        return redirect()->route('departments.index')->with('deleted', 'Отдел скрыт из справочника. Восстановить можно в разделе «Архив и журнал».');
     }
 }

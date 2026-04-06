@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -62,11 +63,10 @@ class User extends Authenticatable
         'last_name',
         'patronymic',
         'role',
+        'role_id',
         'email',
         'password',
         'last_login',
-        'is_superuser',
-        'is_staff',
         'is_active',
         'date_joined',
     ];
@@ -92,17 +92,81 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'last_login' => 'datetime',
-            'is_superuser' => 'boolean',
-            'is_staff' => 'boolean',
             'is_active' => 'boolean',
             'date_joined' => 'datetime',
         ];
     }
 
+    /**
+     * Полное имя для отображения (в БД нет столбца name — ФИО только в частях, 3НФ).
+     */
+    public function getNameAttribute($value): string
+    {
+        return trim(implode(' ', array_filter([
+            $this->attributes['last_name'] ?? '',
+            $this->attributes['first_name'] ?? '',
+            $this->attributes['patronymic'] ?? '',
+        ], fn ($p) => $p !== null && $p !== '')));
+    }
+
+    public function setNameAttribute(string $value): void
+    {
+        unset($this->attributes['name']);
+        $parts = preg_split('/\s+/u', trim($value), -1, PREG_SPLIT_NO_EMPTY);
+        if (count($parts) >= 3) {
+            $this->attributes['last_name'] = $parts[0];
+            $this->attributes['first_name'] = $parts[1];
+            $this->attributes['patronymic'] = implode(' ', array_slice($parts, 2));
+        } elseif (count($parts) === 2) {
+            $this->attributes['last_name'] = $parts[0];
+            $this->attributes['first_name'] = $parts[1];
+            $this->attributes['patronymic'] = null;
+        } elseif (count($parts) === 1) {
+            $this->attributes['last_name'] = '';
+            $this->attributes['first_name'] = $parts[0];
+            $this->attributes['patronymic'] = null;
+        } else {
+            $this->attributes['last_name'] = '';
+            $this->attributes['first_name'] = '';
+            $this->attributes['patronymic'] = null;
+        }
+    }
+
     /** Название роли для отображения в интерфейсе. */
     public function getRoleLabelAttribute(): ?string
     {
-        return $this->role ? (self::ROLE_LABELS[$this->role] ?? $this->role) : null;
+        $key = $this->role;
+
+        return $key ? (self::ROLE_LABELS[$key] ?? $key) : null;
+    }
+
+    /** Строковый ключ роли (из связи roles); колонки role в таблице нет — 3НФ. */
+    public function getRoleAttribute($value): ?string
+    {
+        if ($this->role_id === null) {
+            return null;
+        }
+        if ($this->relationLoaded('roleModel')) {
+            return $this->roleModel?->name;
+        }
+
+        return Role::query()->whereKey($this->role_id)->value('name');
+    }
+
+    public function setRoleAttribute(?string $value): void
+    {
+        unset($this->attributes['role']);
+        if ($value === null || $value === '') {
+            $this->attributes['role_id'] = null;
+
+            return;
+        }
+        $this->attributes['role_id'] = Role::query()->where('name', $value)->value('id');
+    }
+
+    public function roleModel(): BelongsTo
+    {
+        return $this->belongsTo(Role::class, 'role_id');
     }
 
     public function groups(): BelongsToMany
@@ -110,9 +174,9 @@ class User extends Authenticatable
         return $this->belongsToMany(Group::class, 'group_user');
     }
 
-    public function equipmentHistory(): HasMany
+    public function activityLogs(): HasMany
     {
-        return $this->hasMany(EquipmentHistory::class);
+        return $this->hasMany(ActivityLog::class, 'user_id');
     }
 
     public function equipmentRequests(): HasMany

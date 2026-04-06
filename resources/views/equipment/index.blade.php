@@ -240,21 +240,21 @@
                                             <div>
                                                 <a href="{{ route('equipment.edit', $item) }}" class="text-teal-600 hover:text-teal-800 font-semibold text-base" title="Изменить">Изменить</a>
                                             </div>
-                                            @if(auth()->user()?->isAdmin())
-                                                <div class="flex flex-wrap items-center gap-2">
-                                                    <form method="post" action="{{ route('equipment.destroy', $item) }}" class="inline" onsubmit="return confirm('Удалить это оборудование?');">
-                                                        @csrf
-                                                        @method('DELETE')
-                                                        <button type="submit" class="text-red-600 hover:text-red-800 font-medium text-sm" title="Удалить">Удалить</button>
-                                                    </form>
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <form method="post" action="{{ route('equipment.destroy', $item) }}" class="inline" onsubmit="return confirm('Убрать оборудование из списка? Запись сохранится в архиве, администратор сможет восстановить.');">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="text-amber-700 hover:text-amber-900 font-medium text-sm" title="Удалить из списка">Удалить из списка</button>
+                                                </form>
+                                                @if(auth()->user()?->isAdmin())
                                                     @if($item->writeoff_status === 'requested')
                                                         <form method="post" action="{{ route('equipment.requests.approveWriteoff', $item) }}" class="inline" onsubmit="return confirm('Подтвердить списание этого оборудования?');">
                                                             @csrf
                                                             <button type="submit" class="text-sm font-medium text-amber-700 hover:text-amber-900" title="Подтвердить списание">Подтвердить списание</button>
                                                         </form>
                                                     @endif
-                                                </div>
-                                            @endif
+                                                @endif
+                                            </div>
                                         </td>
                                     @endif
                                     <td data-col="col-number" class="px-2 py-1.5 text-slate-700 whitespace-nowrap">{{ $item->number ?? $item->id }}</td>

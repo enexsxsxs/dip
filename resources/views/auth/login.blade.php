@@ -3,6 +3,12 @@
 
     <x-auth-session-status class="mb-4 px-3 py-2 rounded-lg bg-teal-50 text-teal-800 text-sm border border-teal-100" :status="session('status')" />
 
+    @if (session('error'))
+        <div class="mb-4 px-3 py-2 rounded-lg bg-red-50 text-red-800 text-sm border border-red-100" role="alert">
+            {{ session('error') }}
+        </div>
+    @endif
+
     <form method="POST" action="{{ route('login') }}" class="space-y-5">
         @csrf
 

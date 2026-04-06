@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\EquipmentType;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,7 +19,15 @@ class EquipmentTypeController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $request->validate(['name' => 'required|string|max:255']);
-        EquipmentType::create(['name' => $request->input('name')]);
+        $type = EquipmentType::create(['name' => $request->input('name')]);
+        ActivityLog::record(
+            EquipmentType::class,
+            $type->id,
+            'created',
+            $type->name,
+            'Добавлен вид оборудования.',
+        );
+
         return redirect()->route('equipment-types.index')->with('success', 'Вид оборудования добавлен.');
     }
 
@@ -27,7 +36,17 @@ class EquipmentTypeController extends Controller
         if ($equipmentType->equipment()->exists()) {
             return redirect()->route('equipment-types.index')->with('error', 'Нельзя удалить вид оборудования, к которому привязано оборудование.');
         }
+        $label = $equipmentType->name;
+        $id = $equipmentType->id;
         $equipmentType->delete();
-        return redirect()->route('equipment-types.index')->with('deleted', 'Вид оборудования удалён.');
+        ActivityLog::record(
+            EquipmentType::class,
+            $id,
+            'deleted',
+            $label,
+            'Вид оборудования удалён из справочника.',
+        );
+
+        return redirect()->route('equipment-types.index')->with('deleted', 'Вид оборудования скрыт из справочника. Восстановить можно в разделе «Архив и журнал».');
     }
 }

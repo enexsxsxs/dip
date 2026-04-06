@@ -16,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'equipment.manage' => \App\Http\Middleware\EnsureUserCanManageEquipment::class,
             'reports.add' => \App\Http\Middleware\EnsureUserCanAddReports::class,
         ]);
+        $middleware->appendToGroup('web', \App\Http\Middleware\EnsureUserIsActive::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

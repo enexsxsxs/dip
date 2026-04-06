@@ -10,10 +10,13 @@ use App\Models\EquipmentType;
 use App\Models\Group;
 use App\Models\ServiceOrganization;
 use App\Models\EquipmentDocument;
+use App\Models\EquipmentDocumentType;
+use App\Models\ActivityLog;
 use App\Models\Supplier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class EquipmentController extends Controller
@@ -76,7 +79,7 @@ class EquipmentController extends Controller
         $query = Equipment::query()
             ->from('equipment as equipment')
             ->select('equipment.*')
-            ->with(['department', 'cabinet', 'group', 'equipmentType', 'equipmentCondition']);
+            ->with(['department', 'cabinet', 'group', 'equipmentType', 'equipmentCondition', 'writeoffState']);
 
         if ($search !== '') {
             $term = '%' . trim($search) . '%';
@@ -184,7 +187,7 @@ class EquipmentController extends Controller
     {
         $equipment->load([
             'images',
-            'documents',
+            'documents.documentType',
             'equipmentType',
             'department',
             'cabinet',
@@ -192,6 +195,7 @@ class EquipmentController extends Controller
             'equipmentCondition',
             'supplier',
             'serviceOrganization',
+            'writeoffState',
         ]);
 
         $departments = Department::orderBy('name')->get(['id', 'name']);
@@ -221,7 +225,14 @@ class EquipmentController extends Controller
             'commissioning_act' => 'Акт ввода в эксплуатацию',
             'ru_scan' => 'Регистрационное удостоверение',
         ];
-        $equipment->documents()->where('type', $type)->get()->each(function (EquipmentDocument $doc) {
+        $equipment->load(['images', 'documents']);
+        $snapshotBeforeJson = json_encode($this->buildEquipmentSnapshot($equipment), JSON_UNESCAPED_UNICODE);
+
+        $typeId = EquipmentDocumentType::idForCode($type);
+        if ($typeId === null) {
+            return redirect()->back()->with('error', 'Неизвестный тип документа.');
+        }
+        $equipment->documents()->where('document_type_id', $typeId)->get()->each(function (EquipmentDocument $doc) {
             Storage::disk('public')->delete($doc->document);
             $doc->delete();
         });
@@ -229,9 +240,19 @@ class EquipmentController extends Controller
         $equipment->documents()->create([
             'document' => $path,
             'name' => $labels[$type],
-            'type' => $type,
+            'document_type_id' => $typeId,
             'uploaded_at' => now(),
         ]);
+        $equipment->refresh()->load(['images', 'documents.documentType']);
+        ActivityLog::record(
+            Equipment::class,
+            $equipment->id,
+            'updated',
+            '№'.$equipment->number.' — '.$equipment->name,
+            'Загружен документ: '.$labels[$type].'.',
+            $snapshotBeforeJson,
+        );
+
         return redirect()->route('equipment.show', $equipment)->with('success', 'Документ загружен.');
     }
 
@@ -266,19 +287,19 @@ class EquipmentController extends Controller
             'images.max' => 'Максимум 5 фотографий.',
         ]);
         $validated =         $request->validate([
-            'document_registration_certificate' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
-            'document_instruction' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
-            'document_commissioning_act' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
-            'number' => 'required|integer|min:1|unique:equipment,number',
-            'equipment_type_id' => 'nullable|exists:equipment_types,id',
+            'document_registration_certificate' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
+            'document_instruction' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
+            'document_commissioning_act' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
+            'number' => ['required', 'integer', 'min:1', Rule::unique('equipment', 'number')->whereNull('deleted_at')],
+            'equipment_type_id' => ['nullable', Rule::exists('equipment_types', 'id')->whereNull('deleted_at')],
             'name' => 'required|string|max:255',
             'serial_number' => 'nullable|string|max:100',
             'production_date' => 'nullable|date',
             'year_of_manufacture' => 'nullable|string|max:55',
             'date_accepted_to_accounting' => 'nullable|date',
             'inventory_number' => 'nullable|string|max:100',
-            'department_id' => 'nullable|exists:departments,id',
-            'cabinet_id' => 'nullable|exists:cabinets,id',
+            'department_id' => ['nullable', Rule::exists('departments', 'id')->whereNull('deleted_at')],
+            'cabinet_id' => ['nullable', Rule::exists('cabinets', 'id')->whereNull('deleted_at')],
             'group_id' => 'nullable|exists:groups,id',
             'equipment_condition_id' => 'nullable|exists:equipment_conditions,id',
             'ru_number' => 'nullable|string|max:100',
@@ -290,14 +311,8 @@ class EquipmentController extends Controller
             'valid_to' => 'nullable|string|max:20',
             'verification_period' => 'nullable|string|max:55',
             'last_verification_date' => 'nullable|string|max:20',
-            'instruction_pdf' => 'nullable|string|max:100',
-            'registration_certificate_pdf' => 'nullable|string|max:100',
             'supplier_id' => 'nullable|exists:suppliers,id',
             'service_organization_id' => 'nullable|exists:service_organizations,id',
-        ], [
-            'document_registration_certificate.required' => 'Загрузите регистрационное удостоверение.',
-            'document_instruction.required' => 'Загрузите инструкцию на русском языке.',
-            'document_commissioning_act.required' => 'Загрузите акт ввода в эксплуатацию.',
         ]);
 
         $validated['production_date'] = $request->filled('production_date') ? $request->input('production_date') : null;
@@ -315,6 +330,14 @@ class EquipmentController extends Controller
         $this->storeEquipmentImages($request->file('images'), $equipment);
         $this->storeEquipmentDocuments($request, $equipment);
 
+        $equipment->refresh();
+        $this->logEquipmentAudit(
+            $equipment,
+            'created',
+            null,
+            'Создана карточка оборудования № '.$equipment->number.' пользователем '.(auth()->user()?->name ?? '—').'.'
+        );
+
         return redirect()->route('equipment.index')->with('success', 'Оборудование добавлено.');
     }
 
@@ -323,7 +346,7 @@ class EquipmentController extends Controller
      */
     public function edit(Equipment $equipment): View
     {
-        $equipment->load(['images', 'documents']);
+        $equipment->load(['images', 'documents.documentType']);
         return view('equipment.edit', [
             'equipment' => $equipment,
             'equipmentTypes' => EquipmentType::orderBy('name')->get(['id', 'name']),
@@ -364,16 +387,21 @@ class EquipmentController extends Controller
             'document_registration_certificate' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
             'document_instruction' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
             'document_commissioning_act' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
-            'number' => 'required|integer|min:1|unique:equipment,number,' . $equipment->id,
-            'equipment_type_id' => 'nullable|exists:equipment_types,id',
+            'number' => [
+                'required',
+                'integer',
+                'min:1',
+                Rule::unique('equipment', 'number')->whereNull('deleted_at')->ignore($equipment->id),
+            ],
+            'equipment_type_id' => ['nullable', Rule::exists('equipment_types', 'id')->whereNull('deleted_at')],
             'name' => 'required|string|max:255',
             'serial_number' => 'nullable|string|max:100',
             'production_date' => 'nullable|date',
             'year_of_manufacture' => 'nullable|string|max:55',
             'date_accepted_to_accounting' => 'nullable|date',
             'inventory_number' => 'nullable|string|max:100',
-            'department_id' => 'nullable|exists:departments,id',
-            'cabinet_id' => 'nullable|exists:cabinets,id',
+            'department_id' => ['nullable', Rule::exists('departments', 'id')->whereNull('deleted_at')],
+            'cabinet_id' => ['nullable', Rule::exists('cabinets', 'id')->whereNull('deleted_at')],
             'group_id' => 'nullable|exists:groups,id',
             'equipment_condition_id' => 'nullable|exists:equipment_conditions,id',
             'ru_number' => 'nullable|string|max:100',
@@ -385,8 +413,6 @@ class EquipmentController extends Controller
             'valid_to' => 'nullable|string|max:20',
             'verification_period' => 'nullable|string|max:55',
             'last_verification_date' => 'nullable|string|max:20',
-            'instruction_pdf' => 'nullable|string|max:100',
-            'registration_certificate_pdf' => 'nullable|string|max:100',
             'supplier_id' => 'nullable|exists:suppliers,id',
             'service_organization_id' => 'nullable|exists:service_organizations,id',
         ]);
@@ -401,6 +427,10 @@ class EquipmentController extends Controller
         $validated['equipment_condition_id'] = $request->filled('equipment_condition_id') ? $validated['equipment_condition_id'] : null;
         $validated['supplier_id'] = $request->filled('supplier_id') ? $validated['supplier_id'] : null;
         $validated['service_organization_id'] = $request->filled('service_organization_id') ? $validated['service_organization_id'] : null;
+
+        $equipment->load(['images', 'documents.documentType']);
+        $snapshotBeforeJson = json_encode($this->buildEquipmentSnapshot($equipment), JSON_UNESCAPED_UNICODE);
+        $before = $equipment->getAttributes();
 
         $equipment->update($validated);
 
@@ -417,6 +447,9 @@ class EquipmentController extends Controller
         }
         $this->storeEquipmentDocuments($request, $equipment);
 
+        $equipment->refresh();
+        $this->logEquipmentUpdated($equipment, $before, $validDeleteIds, $newFiles, $snapshotBeforeJson);
+
         return redirect()->route('equipment.index')->with('success', 'Оборудование обновлено.');
     }
 
@@ -427,12 +460,16 @@ class EquipmentController extends Controller
             'instruction' => ['document_instruction', 'Инструкция на русском языке'],
             'commissioning_act' => ['document_commissioning_act', 'Акт ввода в эксплуатацию'],
         ];
-        foreach ($documentMap as $type => [$key, $label]) {
+        foreach ($documentMap as $typeCode => [$key, $label]) {
             $file = $request->file($key);
             if (!$file || !$file->isValid()) {
                 continue;
             }
-            $existing = $equipment->documents()->where('type', $type)->get();
+            $typeId = EquipmentDocumentType::idForCode($typeCode);
+            if ($typeId === null) {
+                continue;
+            }
+            $existing = $equipment->documents()->where('document_type_id', $typeId)->get();
             foreach ($existing as $doc) {
                 Storage::disk('public')->delete($doc->document);
                 $doc->delete();
@@ -441,7 +478,7 @@ class EquipmentController extends Controller
             $equipment->documents()->create([
                 'document' => $path,
                 'name' => $label,
-                'type' => $type,
+                'document_type_id' => $typeId,
                 'uploaded_at' => now(),
             ]);
         }
@@ -472,17 +509,103 @@ class EquipmentController extends Controller
     }
 
     /**
-     * Удаление оборудования (только для админа).
+     * Удаление из списка (мягкое): карточка и файлы сохраняются, запись в журнале, восстановление — у администратора.
      */
     public function destroy(Equipment $equipment): RedirectResponse
     {
-        foreach ($equipment->images as $img) {
-            Storage::disk('public')->delete($img->image);
-        }
-        foreach ($equipment->documents as $doc) {
-            Storage::disk('public')->delete($doc->document);
-        }
+        $equipment->load(['images', 'documents.documentType']);
+        $snapshot = $this->buildEquipmentSnapshot($equipment);
+
+        ActivityLog::record(
+            Equipment::class,
+            $equipment->id,
+            'deleted',
+            '№'.$equipment->number.' — '.$equipment->name,
+            'Удаление из списка оборудования пользователем '.(auth()->user()?->name ?? '—').'. Данные и файлы сохранены; можно восстановить в разделе «Архив и журнал».',
+            json_encode($snapshot, JSON_UNESCAPED_UNICODE),
+            null,
+            (string) $equipment->number,
+            $equipment->name,
+        );
+
         $equipment->delete();
-        return redirect()->route('equipment.index')->with('deleted', 'Оборудование удалено.');
+
+        return redirect()->route('equipment.index')->with('deleted', 'Оборудование скрыто из списка. Администратор может восстановить запись в «Архив и журнал».');
+    }
+
+    private function buildEquipmentSnapshot(Equipment $equipment): array
+    {
+        return [
+            'equipment' => $equipment->getAttributes(),
+            'images' => $equipment->images->map(fn ($i) => ['id' => $i->id, 'path' => $i->image])->values()->all(),
+            'documents' => $equipment->documents->map(fn ($d) => [
+                'id' => $d->id,
+                'path' => $d->document,
+                'document_type_id' => $d->document_type_id,
+                'type' => $d->type,
+                'name' => $d->name,
+                'uploaded_at' => $d->uploaded_at?->format('Y-m-d H:i:s'),
+            ])->values()->all(),
+        ];
+    }
+
+    private function logEquipmentAudit(Equipment $equipment, string $action, ?string $snapshotJson, string $details): void
+    {
+        ActivityLog::record(
+            Equipment::class,
+            $equipment->id,
+            $action,
+            '№'.$equipment->number.' — '.$equipment->name,
+            $details,
+            $snapshotJson,
+        );
+    }
+
+    /**
+     * @param  array<int, int>  $removedImageIds
+     * @param  array<int, mixed>  $newImageFiles
+     */
+    private function logEquipmentUpdated(Equipment $equipment, array $before, array $removedImageIds, array $newImageFiles, string $snapshotBeforeJson): void
+    {
+        $lines = [];
+        foreach ($equipment->getAttributes() as $key => $newVal) {
+            if ($key === 'deleted_at') {
+                continue;
+            }
+            if (! array_key_exists($key, $before)) {
+                continue;
+            }
+            $oldVal = $before[$key];
+            if ($oldVal == $newVal) {
+                continue;
+            }
+            $lines[] = $key.': '.json_encode($oldVal, JSON_UNESCAPED_UNICODE).' → '.json_encode($newVal, JSON_UNESCAPED_UNICODE);
+        }
+        if ($removedImageIds !== []) {
+            $lines[] = 'Удалены фото id: '.implode(', ', $removedImageIds);
+        }
+        if ($newImageFiles !== []) {
+            $lines[] = 'Добавлено новых фото: '.count($newImageFiles);
+        }
+
+        $docKeys = ['document_registration_certificate', 'document_instruction', 'document_commissioning_act'];
+        foreach ($docKeys as $dk) {
+            if (request()->hasFile($dk)) {
+                $lines[] = 'Загружен документ: '.$dk;
+            }
+        }
+
+        if ($lines === []) {
+            return;
+        }
+
+        ActivityLog::record(
+            Equipment::class,
+            $equipment->id,
+            'updated',
+            '№'.$equipment->number.' — '.$equipment->name,
+            'Изменение карточки пользователем '.(auth()->user()?->name ?? '—').":\n".implode("\n", $lines),
+            $snapshotBeforeJson,
+        );
     }
 }

@@ -6,10 +6,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Equipment extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     public $timestamps = false;
 
@@ -35,11 +37,9 @@ class Equipment extends Model
         'valid_to',
         'verification_period',
         'last_verification_date',
-        'instruction_pdf',
-        'registration_certificate_pdf',
         'supplier_id',
         'service_organization_id',
-        'writeoff_status',
+        'writeoff_state_id',
     ];
 
     protected function casts(): array
@@ -59,6 +59,31 @@ class Equipment extends Model
     public function isWrittenOff(): bool
     {
         return $this->writeoff_status === 'approved';
+    }
+
+    /** Код состояния списания (столбца writeoff_status в БД нет — связь writeoff_states, 3НФ). */
+    public function getWriteoffStatusAttribute(): ?string
+    {
+        if (! array_key_exists('writeoff_state_id', $this->attributes) || $this->attributes['writeoff_state_id'] === null) {
+            return null;
+        }
+        if ($this->relationLoaded('writeoffState')) {
+            return $this->writeoffState?->code;
+        }
+
+        return WriteoffState::query()->whereKey($this->attributes['writeoff_state_id'])->value('code');
+    }
+
+    public function setWriteoffStatusAttribute(?string $value): void
+    {
+        unset($this->attributes['writeoff_status']);
+        $code = $value === null || $value === '' ? 'none' : $value;
+        $this->attributes['writeoff_state_id'] = WriteoffState::query()->where('code', $code)->value('id');
+    }
+
+    public function writeoffState(): BelongsTo
+    {
+        return $this->belongsTo(WriteoffState::class, 'writeoff_state_id');
     }
 
     public function equipmentType(): BelongsTo
@@ -106,9 +131,9 @@ class Equipment extends Model
         return $this->hasMany(EquipmentDocument::class);
     }
 
-    public function history(): HasMany
+    public function activityLogs(): MorphMany
     {
-        return $this->hasMany(EquipmentHistory::class);
+        return $this->morphMany(ActivityLog::class, 'entity');
     }
 
     public function requests(): HasMany

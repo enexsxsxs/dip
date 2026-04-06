@@ -36,41 +36,38 @@
         </div>
     </section>
 
-    {{-- Документы: Регистрационное удостоверение, Инструкция, Акт ввода в эксплуатацию (обязательны при добавлении) --}}
+    {{-- Документы: по желанию; при необходимости можно добавить позже на карточке --}}
     <section class="border-b-2 border-slate-200">
         <div class="px-6 py-4 bg-slate-100 border-l-4 border-slate-400">
             <h3 class="text-base font-bold text-slate-800 uppercase tracking-wider">Документы</h3>
-            <p class="text-base text-slate-600 mt-1">При добавлении оборудования обязательны: регистрационное удостоверение, инструкция на русском языке, акт ввода в эксплуатацию. Форматы: PDF, Word (.doc, .docx), Excel (.xls, .xlsx).</p>
+            <p class="text-base text-slate-600 mt-1">Регистрационное удостоверение, инструкция на русском языке и акт ввода в эксплуатацию — по желанию (можно загрузить позже при редактировании). Форматы: PDF, Word (.doc, .docx), Excel (.xls, .xlsx).</p>
         </div>
         <div class="p-6">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div>
-                <label for="document_registration_certificate" class="block text-base font-semibold text-slate-600 mb-2">1. Регистрационное удостоверение <span class="text-red-500">*</span></label>
+                <label for="document_registration_certificate" class="block text-base font-semibold text-slate-600 mb-2">1. Регистрационное удостоверение</label>
                 @if($isEdit && ($equipment->documents ?? collect())->whereIn('type', ['registration_certificate', 'ru_scan'])->isNotEmpty())
                     <p class="text-base text-slate-500 mb-2">Текущий: {{ ($equipment->documents ?? collect())->first(fn($d) => in_array($d->type ?? '', ['registration_certificate', 'ru_scan']))->name ?? '—' }}</p>
                 @endif
                 <input type="file" id="document_registration_certificate" name="document_registration_certificate" accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                       @if(!$isEdit) required @endif
                        class="block w-full text-base text-slate-600 file:mr-3 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100">
                 <x-input-error :messages="$errors->get('document_registration_certificate')" class="mt-1" />
             </div>
             <div>
-                <label for="document_instruction" class="block text-base font-semibold text-slate-600 mb-2">2. Инструкция на русском языке <span class="text-red-500">*</span></label>
+                <label for="document_instruction" class="block text-base font-semibold text-slate-600 mb-2">2. Инструкция на русском языке</label>
                 @if($isEdit && ($equipment->documents ?? collect())->where('type', 'instruction')->isNotEmpty())
                     <p class="text-base text-slate-500 mb-2">Текущий: {{ ($equipment->documents ?? collect())->first(fn($d) => ($d->type ?? '') === 'instruction')->name ?? '—' }}</p>
                 @endif
                 <input type="file" id="document_instruction" name="document_instruction" accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                       @if(!$isEdit) required @endif
                        class="block w-full text-base text-slate-600 file:mr-3 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100">
                 <x-input-error :messages="$errors->get('document_instruction')" class="mt-1" />
             </div>
             <div>
-                <label for="document_commissioning_act" class="block text-base font-semibold text-slate-600 mb-2">3. Акт ввода в эксплуатацию <span class="text-red-500">*</span></label>
+                <label for="document_commissioning_act" class="block text-base font-semibold text-slate-600 mb-2">3. Акт ввода в эксплуатацию</label>
                 @if($isEdit && ($equipment->documents ?? collect())->where('type', 'commissioning_act')->isNotEmpty())
                     <p class="text-base text-slate-500 mb-2">Текущий: {{ ($equipment->documents ?? collect())->first(fn($d) => ($d->type ?? '') === 'commissioning_act')->name ?? '—' }}</p>
                 @endif
                 <input type="file" id="document_commissioning_act" name="document_commissioning_act" accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                       @if(!$isEdit) required @endif
                        class="block w-full text-base text-slate-600 file:mr-3 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100">
                 <x-input-error :messages="$errors->get('document_commissioning_act')" class="mt-1" />
             </div>

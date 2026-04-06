@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,7 +17,11 @@ class UserController extends Controller
      */
     public function index(): View
     {
-        $users = User::query()->orderBy('id')->paginate(15);
+        $users = User::query()
+            ->with('roleModel')
+            ->orderByDesc('is_active')
+            ->orderBy('id')
+            ->paginate(15);
 
         return view('users.index', compact('users'));
     }
@@ -50,17 +55,25 @@ class UserController extends Controller
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
-        User::create([
+        $user = User::create([
             'last_name' => $request->surname,
             'first_name' => $request->name,
             'patronymic' => $request->patronymic ?? '',
             'email' => $request->email,
             'role' => $request->role,
             'password' => Hash::make($request->password),
-            'name' => trim($request->surname.' '.$request->name.' '.($request->patronymic ?? '')),
             'is_active' => true,
             'date_joined' => now(),
         ]);
+
+        $roleLabel = User::ROLE_LABELS[$request->role] ?? $request->role;
+        ActivityLog::record(
+            User::class,
+            $user->id,
+            'created',
+            $user->name.' ('.$user->email.')',
+            'Создан пользователь, роль: '.$roleLabel.'.',
+        );
 
         return redirect()
             ->route('users.index')
@@ -111,7 +124,6 @@ class UserController extends Controller
             'patronymic' => $request->patronymic ?? '',
             'email' => $request->email,
             'role' => $role,
-            'name' => trim($request->surname.' '.$request->name.' '.($request->patronymic ?? '')),
         ];
 
         if ($request->filled('password')) {
@@ -120,32 +132,92 @@ class UserController extends Controller
 
         $user->update($data);
 
+        ActivityLog::record(
+            User::class,
+            $user->id,
+            'updated',
+            $user->name.' ('.$user->email.')',
+            'Изменены данные пользователя.',
+        );
+
         return redirect()
             ->route('users.index')
             ->with('status', 'Пользователь успешно обновлён.');
     }
 
     /**
-     * Удаление пользователя. Нельзя удалить себя или другого администратора.
+     * Увольнение: запись в БД сохраняется, вход блокируется (is_active = false).
      */
     public function destroy(User $user): RedirectResponse
     {
         if ($user->id === auth()->id()) {
             return redirect()
                 ->route('users.index')
-                ->with('error', 'Нельзя удалить самого себя.');
+                ->with('error', 'Нельзя уволить самого себя.');
         }
 
         if ($user->isAdmin()) {
             return redirect()
                 ->route('users.index')
-                ->with('error', 'Нельзя удалить администратора.');
+                ->with('error', 'Нельзя уволить администратора.');
         }
 
-        $user->delete();
+        if (! $user->is_active) {
+            return redirect()
+                ->route('users.index')
+                ->with('error', 'Этот сотрудник уже уволен.');
+        }
+
+        $user->update(['is_active' => false]);
+
+        ActivityLog::record(
+            User::class,
+            $user->id,
+            'deactivated',
+            $user->name.' ('.$user->email.')',
+            'Увольнение: доступ в систему отключён, учётная запись сохранена.',
+        );
 
         return redirect()
             ->route('users.index')
-            ->with('deleted', 'Пользователь удалён.');
+            ->with('status', 'Сотрудник уволен: доступ в систему отключён, запись сохранена.');
+    }
+
+    /**
+     * Восстановление доступа уволенному сотруднику (кроме конфликтов с правилами выше).
+     */
+    public function restore(User $user): RedirectResponse
+    {
+        if ($user->id === auth()->id()) {
+            return redirect()
+                ->route('users.index')
+                ->with('error', 'Некорректная операция.');
+        }
+
+        if ($user->isAdmin()) {
+            return redirect()
+                ->route('users.index')
+                ->with('error', 'Операция не применима к администратору.');
+        }
+
+        if ($user->is_active) {
+            return redirect()
+                ->route('users.index')
+                ->with('error', 'Сотрудник уже активен.');
+        }
+
+        $user->update(['is_active' => true]);
+
+        ActivityLog::record(
+            User::class,
+            $user->id,
+            'restored',
+            $user->name.' ('.$user->email.')',
+            'Доступ сотрудника восстановлен.',
+        );
+
+        return redirect()
+            ->route('users.index')
+            ->with('status', 'Доступ сотрудника восстановлен.');
     }
 }

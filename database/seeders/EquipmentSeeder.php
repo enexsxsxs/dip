@@ -49,7 +49,6 @@ class EquipmentSeeder extends Seeder
         }
     }
 
-    /** Фото 1 — холодильники */
     private function seedRefrigerators(): void
     {
         $types = [
@@ -84,7 +83,6 @@ class EquipmentSeeder extends Seeder
         }
     }
 
-    /** Фото 2 — стерилизаторы */
     private function seedSterilizers(): void
     {
         $rows = [

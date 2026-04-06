@@ -41,6 +41,9 @@
                         <x-nav-link :href="route('users.index')" :active="request()->routeIs('users.*')">
                             Пользователи
                         </x-nav-link>
+                        <x-nav-link :href="route('admin.activity-archive')" :active="request()->routeIs(['admin.activity-archive', 'admin.activity-archive.clear', 'admin.activity-archive.restore'])">
+                            Архив и журнал
+                        </x-nav-link>
                     @endif
                 </div>
             </div>
@@ -88,6 +91,7 @@
                 <x-responsive-nav-link :href="route('departments.index')" :active="request()->routeIs('departments.*')">Отделы</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('cabinets.index')" :active="request()->routeIs('cabinets.*')">Помещение / Кабинет</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('users.index')" :active="request()->routeIs('users.*')">Пользователи</x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('admin.activity-archive')" :active="request()->routeIs(['admin.activity-archive', 'admin.activity-archive.clear', 'admin.activity-archive.restore'])">Архив и журнал</x-responsive-nav-link>
             @endif
         </div>
         <div class="pt-4 pb-3 border-t border-teal-100">
