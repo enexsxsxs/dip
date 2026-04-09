@@ -25,10 +25,28 @@ Route::get('/dashboard', function () {
 
 Route::middleware('auth')->group(function () {
     Route::get('/equipment', [EquipmentController::class, 'index'])->name('equipment.index');
-    Route::get('/equipment/{equipment}', [EquipmentController::class, 'show'])->name('equipment.show')->whereNumber('equipment');
+    Route::get('/equipment/{equipment}', [EquipmentController::class, 'show'])
+        ->middleware('not.accountant')
+        ->name('equipment.show')
+        ->whereNumber('equipment');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // Бухгалтер: только список и присвоение инвентарного номера из списка
+    Route::middleware('accountant')->group(function () {
+        Route::patch('/equipment/{equipment}/inventory-number', [EquipmentController::class, 'updateInventoryNumber'])
+            ->name('equipment.inventory-number.update');
+    });
+
+    Route::middleware(['utilization.manage', 'not.accountant'])->group(function () {
+        Route::post('/equipment/{equipment}/utilize', [EquipmentController::class, 'markUtilized'])
+            ->name('equipment.utilize')
+            ->whereNumber('equipment');
+        Route::post('/equipment/{equipment}/utilization-act', [EquipmentController::class, 'storeUtilizationAct'])
+            ->name('equipment.utilization-act.store')
+            ->whereNumber('equipment');
+    });
 
     // Оборудование: добавление и редактирование — администратор и старшая медсестра
     Route::middleware('equipment.manage')->group(function () {

@@ -21,7 +21,7 @@ class User extends Authenticatable
      * @var list<string>
      */
     /** Ключи ролей (для БД и валидации). */
-    public const ROLES = ['admin', 'user', 'senior_nurse', 'nurse', 'accountant'];
+    public const ROLES = ['admin', 'user', 'senior_nurse', 'nurse', 'accountant', 'disposal_officer'];
 
     /** Названия ролей для отображения. */
     public const ROLE_LABELS = [
@@ -30,6 +30,7 @@ class User extends Authenticatable
         'senior_nurse' => 'Старшая медсестра',
         'nurse' => 'Медсестра',
         'accountant' => 'Бухгалтер',
+        'disposal_officer' => 'Ответственный за утилизацию',
     ];
 
     /** Является ли пользователь администратором. */
@@ -44,6 +45,18 @@ class User extends Authenticatable
         return $this->role === 'senior_nurse';
     }
 
+    /** Является ли пользователь бухгалтером. */
+    public function isAccountant(): bool
+    {
+        return $this->role === 'accountant';
+    }
+
+    /** Может ли пользователь присваивать инвентарный номер. */
+    public function canAssignInventoryNumber(): bool
+    {
+        return $this->isAccountant();
+    }
+
     /** Может ли пользователь управлять оборудованием (просмотр, добавление, редактирование). */
     public function canManageEquipment(): bool
     {
@@ -54,6 +67,12 @@ class User extends Authenticatable
     public function canAddReports(): bool
     {
         return $this->role === 'admin' || $this->role === 'senior_nurse';
+    }
+
+    /** Отметка утилизации списанного оборудования (администратор или ответственный за утилизацию). */
+    public function canManageUtilization(): bool
+    {
+        return $this->isAdmin() || $this->role === 'disposal_officer';
     }
 
     protected $fillable = [

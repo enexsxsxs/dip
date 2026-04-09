@@ -1,6 +1,5 @@
 <x-app-layout>
     @php
-        $filterKeys = ['q', 'entity_type', 'action', 'user_id', 'date_from', 'date_to'];
         $filtersActive = $filteredCount !== null;
     @endphp
     <x-slot name="header">
@@ -198,73 +197,10 @@
                 @endif
             </form>
 
-            <div class="flex flex-wrap gap-6 items-start justify-between border-t border-gray-200 dark:border-gray-600 pt-6">
-                <form method="post" action="{{ route('admin.activity-archive.clear') }}" class="border border-red-200 dark:border-red-800 rounded-lg p-4 bg-red-50/50 dark:bg-red-900/20 max-w-md"
-                      onsubmit="return confirm('Удалить абсолютно все записи журнала?');">
-                    @csrf
-                    <p class="text-xs font-medium text-red-800 dark:text-red-200 mb-2">Очистить <strong>весь</strong> журнал — введите <strong>ОЧИСТИТЬ</strong></p>
-                    <div class="flex gap-2">
-                        <input type="text" name="confirm_clear" autocomplete="off"
-                               class="flex-1 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-900 text-sm" placeholder="ОЧИСТИТЬ">
-                        <button type="submit" class="px-3 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 shrink-0">Очистить всё</button>
-                    </div>
-                    @error('confirm_clear')
-                        <p class="text-red-600 text-xs mt-2">{{ $message }}</p>
-                    @enderror
-                </form>
-
-                @if ($filtersActive)
-                    <form method="post" action="{{ route('admin.activity-archive.clear-filtered') }}" class="border border-amber-200 dark:border-amber-800 rounded-lg p-4 bg-amber-50/50 dark:bg-amber-900/20 max-w-md"
-                          onsubmit="return confirm('Удалить все {{ $filteredCount }} записей, попавших под текущий фильтр?');">
-                        @csrf
-                        @foreach ($filterKeys as $key)
-                            @if (request()->filled($key))
-                                <input type="hidden" name="{{ $key }}" value="{{ request($key) }}">
-                            @endif
-                        @endforeach
-                        <p class="text-xs font-medium text-amber-900 dark:text-amber-200 mb-2">Удалить только выборку по фильтру ({{ $filteredCount }} шт.) — введите <strong>ОЧИСТИТЬ</strong></p>
-                        <div class="flex gap-2">
-                            <input type="text" name="confirm_clear_filtered" autocomplete="off"
-                                   class="flex-1 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-900 text-sm" placeholder="ОЧИСТИТЬ">
-                            <button type="submit" class="px-3 py-2 bg-amber-700 text-white text-sm font-medium rounded-md hover:bg-amber-800 shrink-0">Очистить выборку</button>
-                        </div>
-                        @error('confirm_clear_filtered')
-                            <p class="text-red-600 text-xs mt-2">{{ $message }}</p>
-                        @enderror
-                    </form>
-                @endif
-            </div>
-
-            <form method="post" action="{{ route('admin.activity-archive.delete-selected') }}"
-                  id="journal-bulk-form"
-                  onsubmit="return document.querySelectorAll('input[form=&quot;journal-bulk-form&quot;][name=&quot;ids[]&quot;]:checked').length > 0 || (alert('Отметьте хотя бы одну запись.'), false);">
-                @csrf
-                @foreach ($filterKeys as $key)
-                    @if (request()->filled($key))
-                        <input type="hidden" name="{{ $key }}" value="{{ request($key) }}">
-                    @endif
-                @endforeach
-            </form>
-
-            @error('ids')
-                <p class="text-red-600 text-sm mb-2">{{ $message }}</p>
-            @enderror
-            <div class="flex flex-wrap items-center gap-3 mb-3">
-                <button type="submit" form="journal-bulk-form" class="px-3 py-2 bg-slate-700 text-white text-sm font-medium rounded-md hover:bg-slate-800"
-                        onclick="return confirm('Удалить отмеченные записи на этой странице?');">
-                    Удалить отмеченные на странице
-                </button>
-                <label class="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
-                    <input type="checkbox" id="journal-select-all" class="rounded border-gray-300 dark:border-gray-600">
-                    Выбрать все на странице
-                </label>
-            </div>
-
             <div class="overflow-x-auto">
                     <table class="min-w-full text-sm">
                         <thead>
                             <tr class="border-b border-gray-200 dark:border-gray-600 text-left text-gray-500 dark:text-gray-400">
-                                <th class="py-2 pr-2 w-10"></th>
                                 <th class="py-2 pr-4">Когда</th>
                                 <th class="py-2 pr-4">Сотрудник</th>
                                 <th class="py-2 pr-4">Тип</th>
@@ -286,9 +222,6 @@
                                         && \App\Models\Equipment::query()->whereKey($row->entity_id)->whereNull('deleted_at')->exists();
                                 @endphp
                                 <tr class="align-top">
-                                    <td class="py-3 pr-2">
-                                        <input type="checkbox" form="journal-bulk-form" name="ids[]" value="{{ $row->id }}" class="journal-row-cb rounded border-gray-300 dark:border-gray-600">
-                                    </td>
                                     <td class="py-3 pr-4 whitespace-nowrap text-gray-700 dark:text-gray-300">
                                         {{ $row->occurred_at?->format('d.m.Y H:i') ?? '—' }}
                                     </td>
@@ -328,6 +261,7 @@
                                         @php
                                             $labels = [
                                                 'writeoff_approved' => 'Списание подтверждено',
+                                                'utilized' => 'Утилизировано',
                                                 'move_approved' => 'Перемещение подтверждено',
                                                 'deleted' => 'Удалено',
                                                 'restored' => 'Восстановлено',
@@ -380,7 +314,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="8" class="py-8 text-center text-gray-500">Записей не найдено. Измените фильтры или сбросьте их.</td>
+                                    <td colspan="7" class="py-8 text-center text-gray-500">Записей не найдено. Измените фильтры или сбросьте их.</td>
                                 </tr>
                             @endforelse
                         </tbody>
@@ -389,11 +323,4 @@
             <div class="mt-4">{{ $entries->links() }}</div>
         </div>
     </div>
-
-    <script>
-        document.getElementById('journal-select-all')?.addEventListener('change', function () {
-            const on = this.checked;
-            document.querySelectorAll('.journal-row-cb').forEach(function (cb) { cb.checked = on; });
-        });
-    </script>
 </x-app-layout>

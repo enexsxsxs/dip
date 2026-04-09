@@ -14,6 +14,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'admin' => \App\Http\Middleware\EnsureUserIsAdmin::class,
             'equipment.manage' => \App\Http\Middleware\EnsureUserCanManageEquipment::class,
+            'utilization.manage' => \App\Http\Middleware\EnsureUserCanManageUtilization::class,
+            'accountant' => \App\Http\Middleware\EnsureUserIsAccountant::class,
+            'not.accountant' => \App\Http\Middleware\EnsureUserIsNotAccountant::class,
             'reports.add' => \App\Http\Middleware\EnsureUserCanAddReports::class,
         ]);
         $middleware->appendToGroup('web', \App\Http\Middleware\EnsureUserIsActive::class);

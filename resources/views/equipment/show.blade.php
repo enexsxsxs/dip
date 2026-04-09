@@ -3,7 +3,8 @@
     $docRegistration = $equipment->documents->first(fn($d) => in_array($d->type ?? '', ['registration_certificate', 'ru_scan']) || stripos($d->name ?? '', 'удостоверен') !== false || stripos($d->name ?? '', 'скан') !== false);
     $docInstruction = $equipment->documents->first(fn($d) => ($d->type ?? '') === 'instruction' || stripos($d->name ?? '', 'инструкц') !== false);
     $docCommissioningAct = $equipment->documents->first(fn($d) => ($d->type ?? '') === 'commissioning_act' || stripos($d->name ?? '', 'акт ввода') !== false);
-    $shownDocIds = array_filter([$docRegistration?->id, $docInstruction?->id, $docCommissioningAct?->id]);
+    $docUtilizationAct = $equipment->documents->first(fn($d) => ($d->type ?? '') === 'utilization_act');
+    $shownDocIds = array_filter([$docRegistration?->id, $docInstruction?->id, $docCommissioningAct?->id, $docUtilizationAct?->id]);
     $otherDocs = $equipment->documents->whereNotIn('id', $shownDocIds);
     $docAccept = '.pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 @endphp
@@ -12,6 +13,21 @@
         @if (session('warning'))
             <div class="mb-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 px-4 py-3 text-sm" role="alert">
                 {{ session('warning') }}
+            </div>
+        @endif
+        @if (session('success'))
+            <div class="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 px-4 py-3 text-sm" role="alert">
+                {{ session('success') }}
+            </div>
+        @endif
+        @if ($errors->has('utilize'))
+            <div class="mb-4 rounded-xl border border-red-200 bg-red-50 text-red-800 px-4 py-3 text-sm" role="alert">
+                {{ $errors->first('utilize') }}
+            </div>
+        @endif
+        @if ($errors->has('utilization_act'))
+            <div class="mb-4 rounded-xl border border-red-200 bg-red-50 text-red-800 px-4 py-3 text-sm" role="alert">
+                {{ $errors->first('utilization_act') }}
             </div>
         @endif
         <div class="bg-white rounded-2xl shadow-xl border border-teal-100 overflow-hidden">
@@ -129,6 +145,41 @@
                                     @endif
                                 @endif
                             </div>
+                            @if($equipment->isUtilized())
+                                <div class="rounded-xl border-2 border-violet-200 p-4 bg-violet-50/40">
+                                    <p class="text-base font-semibold text-slate-700 mb-2">4. Акт утилизации</p>
+                                    @if($docUtilizationAct)
+                                        <div class="flex flex-wrap items-center gap-3">
+                                            <a href="{{ asset('storage/' . $docUtilizationAct->document) }}" target="_blank" rel="noopener" class="text-base font-medium text-violet-700 hover:underline">Открыть в новой вкладке</a>
+                                            <span class="text-slate-300">|</span>
+                                            <a href="{{ asset('storage/' . $docUtilizationAct->document) }}" download class="text-base font-medium text-teal-600 hover:underline">Скачать файл</a>
+                                        </div>
+                                        <p class="text-xs text-slate-500 mt-2">Загружен: {{ $docUtilizationAct->uploaded_at?->format('d.m.Y H:i') ?? '—' }}</p>
+                                        @if(auth()->user()?->canManageUtilization())
+                                            <form method="post" action="{{ route('equipment.utilization-act.store', $equipment) }}" enctype="multipart/form-data" class="mt-4 flex flex-wrap items-end gap-3">
+                                                @csrf
+                                                <div class="flex-1 min-w-[200px]">
+                                                    <label for="utilization_act_replace" class="block text-sm font-semibold text-slate-600 mb-1">Заменить акт</label>
+                                                    <input id="utilization_act_replace" type="file" name="utilization_act" accept="{{ $docAccept }}" required class="text-sm file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-violet-100 file:text-violet-800">
+                                                </div>
+                                                <button type="submit" class="min-h-[44px] px-4 py-2 rounded-xl text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700">Заменить файл</button>
+                                            </form>
+                                        @endif
+                                    @else
+                                        <p class="text-sm text-amber-800 mb-3">Акт утилизации не найден в файлах (возможно, данные устарели). Загрузите файл заново.</p>
+                                        @if(auth()->user()?->canManageUtilization())
+                                            <form method="post" action="{{ route('equipment.utilization-act.store', $equipment) }}" enctype="multipart/form-data" class="flex flex-wrap items-end gap-3">
+                                                @csrf
+                                                <div class="flex-1 min-w-[200px]">
+                                                    <label for="utilization_act_restore" class="block text-sm font-semibold text-slate-600 mb-1">Загрузить акт</label>
+                                                    <input id="utilization_act_restore" type="file" name="utilization_act" accept="{{ $docAccept }}" required class="text-sm file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-violet-100 file:text-violet-800">
+                                                </div>
+                                                <button type="submit" class="min-h-[44px] px-4 py-2 rounded-xl text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700">Сохранить</button>
+                                            </form>
+                                        @endif
+                                    @endif
+                                </div>
+                            @endif
                             @if($otherDocs->isNotEmpty())
                                 @foreach($otherDocs as $doc)
                                     <div class="rounded-xl border-2 border-slate-200 p-4 bg-slate-50">
@@ -216,7 +267,36 @@
                                 @endif
                             </dd>
                         </div>
+                        <div class="flex justify-between gap-4">
+                            <dt class="text-slate-500 shrink-0">Утилизация</dt>
+                            <dd class="text-slate-800 text-right">
+                                @if($equipment->isUtilized())
+                                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold bg-slate-100 text-slate-700 border-2 border-slate-200">
+                                        Утилизировано
+                                    </span>
+                                @else
+                                    <span class="text-sm text-slate-400">Не утилизировано</span>
+                                @endif
+                            </dd>
+                        </div>
                     </dl>
+
+                    @if(auth()->user()?->canManageUtilization() && $equipment->isWrittenOff() && ! $equipment->isUtilized())
+                        <div class="mt-6 pt-4 border-t-2 border-slate-200">
+                            <h4 class="text-base font-bold text-slate-700 mb-2">Утилизация</h4>
+                            <p class="text-sm text-slate-600 mb-3">Оборудование списано. Прикрепите акт утилизации (PDF, Word или Excel) и подтвердите — в списке строка станет перечёркнутой, акт будет доступен для просмотра и скачивания в блоке «Документы».</p>
+                            <form method="POST" action="{{ route('equipment.utilize', $equipment) }}" enctype="multipart/form-data" class="space-y-4" onsubmit="return confirm('Утилизировать оборудование с прикреплённым актом?');">
+                                @csrf
+                                <div>
+                                    <label for="utilization_act_card" class="block text-sm font-semibold text-slate-600 mb-1">Акт утилизации <span class="text-red-500">*</span></label>
+                                    <input id="utilization_act_card" type="file" name="utilization_act" accept="{{ $docAccept }}" required class="block w-full text-sm text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-violet-100 file:text-violet-800">
+                                </div>
+                                <button type="submit" class="inline-flex items-center min-h-[48px] px-5 py-3 rounded-xl text-base font-semibold text-white bg-violet-600 hover:bg-violet-700 transition">
+                                    Утилизировать и сохранить акт
+                                </button>
+                            </form>
+                        </div>
+                    @endif
 
                     @if(auth()->user()?->canManageEquipment())
                         <div class="mt-6 pt-4 border-t-2 border-slate-200 space-y-4">

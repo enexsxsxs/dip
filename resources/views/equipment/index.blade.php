@@ -22,6 +22,8 @@
     $cabinetOptions = collect($cabinets ?? [])->map(fn($c) => ['id' => $c->id, 'label' => $c->number])->values()->all();
     $groupOptions = collect($groups ?? [])->map(fn($g) => ['id' => $g->id, 'label' => $g->name])->values()->all();
     $conditionOptions = collect($conditions ?? [])->map(fn($c) => ['id' => $c->id, 'label' => $c->name])->values()->all();
+    $canAssignInventoryNumber = auth()->user()?->canAssignInventoryNumber();
+    $canManageUtilization = auth()->user()?->canManageUtilization();
 @endphp
 <x-app-layout>
     <x-slot name="header">
@@ -45,6 +47,32 @@
     </x-slot>
 
     <div class="space-y-6 pb-8">
+        @if (session('success'))
+            <div class="rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 px-4 py-3 text-sm">
+                {{ session('success') }}
+            </div>
+        @endif
+        @if (session('status'))
+            <div class="rounded-xl border border-teal-200 bg-teal-50 text-teal-800 px-4 py-3 text-sm">
+                {{ session('status') }}
+            </div>
+        @endif
+        @if ($errors->has('inventory_number'))
+            <div class="rounded-xl border border-red-200 bg-red-50 text-red-800 px-4 py-3 text-sm">
+                {{ $errors->first('inventory_number') }}
+            </div>
+        @endif
+        @if ($errors->has('utilize'))
+            <div class="rounded-xl border border-red-200 bg-red-50 text-red-800 px-4 py-3 text-sm">
+                {{ $errors->first('utilize') }}
+            </div>
+        @endif
+        @if ($errors->has('utilization_act'))
+            <div class="rounded-xl border border-red-200 bg-red-50 text-red-800 px-4 py-3 text-sm">
+                {{ $errors->first('utilization_act') }}
+            </div>
+        @endif
+
         <div class="bg-white rounded-2xl shadow-lg border-2 border-teal-100 p-5">
             <form method="get" action="{{ route('equipment.index') }}" class="flex flex-wrap items-end gap-4">
                 <input type="hidden" name="sort_by" value="{{ $currentSortBy }}">
@@ -234,7 +262,7 @@
                         </thead>
                         <tbody class="divide-y divide-slate-200">
                             @forelse($equipment as $item)
-                                <tr class="hover:bg-teal-50/50 transition text-[11px]">
+                                <tr class="hover:bg-teal-50/50 transition text-[11px] {{ $item->isUtilized() ? 'line-through opacity-60' : '' }}">
                                     @if(auth()->user()?->canManageEquipment())
                                         <td data-col="col-actions" class="px-2 py-1.5 space-y-1">
                                             <div>
@@ -260,22 +288,57 @@
                                     <td data-col="col-number" class="px-2 py-1.5 text-slate-700 whitespace-nowrap">{{ $item->number ?? $item->id }}</td>
                                     <td data-col="col-type" class="px-2 py-1.5 text-slate-700">{{ $item->equipmentType?->name ?? '—' }}</td>
                                     <td data-col="col-name" class="px-2 py-1.5 font-semibold text-slate-800">
-                                        <a href="{{ route('equipment.show', $item) }}" class="text-teal-600 hover:text-teal-800 hover:underline">{{ $item->name ?? '—' }}</a>
+                                        @if(auth()->user()?->canManageEquipment())
+                                            <a href="{{ route('equipment.show', $item) }}" class="text-teal-600 hover:text-teal-800 hover:underline">{{ $item->name ?? '—' }}</a>
+                                        @else
+                                            {{ $item->name ?? '—' }}
+                                        @endif
                                     </td>
                                     <td data-col="col-serial" class="px-2 py-1.5 text-slate-600 whitespace-nowrap">{{ $item->serial_number ?? '—' }}</td>
                                     <td data-col="col-production-date" class="px-2 py-1.5 text-slate-600 whitespace-nowrap">{{ $item->production_date?->format('d.m.Y') ?? '—' }}</td>
                                     <td data-col="col-year" class="px-2 py-1.5 text-slate-600">{{ $item->year_of_manufacture ?? '—' }}</td>
                                     <td data-col="col-accepted-date" class="px-2 py-1.5 text-slate-600 whitespace-nowrap">{{ $item->date_accepted_to_accounting?->format('d.m.Y') ?? '—' }}</td>
-                                    <td data-col="col-inventory" class="px-2 py-1.5 text-slate-600 whitespace-nowrap">{{ $item->inventory_number ?? '—' }}</td>
+                                    <td data-col="col-inventory" class="px-2 py-1.5 text-slate-600 whitespace-nowrap">
+                                        @if($canAssignInventoryNumber)
+                                            <form method="post" action="{{ route('equipment.inventory-number.update', $item) }}" class="flex items-center gap-2">
+                                                @csrf
+                                                @method('PATCH')
+                                                <input type="hidden" name="equipment_id" value="{{ $item->id }}">
+                                                <input type="text" name="inventory_number" value="{{ old('equipment_id') == $item->id ? old('inventory_number', $item->inventory_number) : $item->inventory_number }}"
+                                                       class="w-32 rounded-md border-slate-300 text-[11px] py-1 px-2"
+                                                       placeholder="Инв. №" maxlength="100" required>
+                                                <button type="submit" class="px-2 py-1 rounded bg-teal-600 text-white text-[10px] font-semibold hover:bg-teal-700">
+                                                    Сохранить
+                                                </button>
+                                            </form>
+                                        @else
+                                            {{ $item->inventory_number ?? '—' }}
+                                        @endif
+                                    </td>
                                     <td data-col="col-department" class="px-2 py-1.5 text-slate-600">{{ $item->department?->name ?? '—' }}</td>
                                     <td data-col="col-cabinet" class="px-2 py-1.5 text-slate-600 whitespace-nowrap">{{ $item->cabinet?->number ?? '—' }}</td>
                                     <td data-col="col-group" class="px-2 py-1.5 text-slate-600">{{ $item->group?->name ?? '—' }}</td>
                                     <td data-col="col-condition" class="px-2 py-1.5 text-slate-600">{{ $item->equipmentCondition?->name ?? '—' }}</td>
                                     <td data-col="col-writeoff" class="px-2 py-1.5">
                                         @if($item->writeoff_status === 'approved')
-                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-red-50 text-red-700 border border-red-200 text-[10px]">
-                                                Списано
-                                            </span>
+                                            <div class="flex flex-col gap-1 items-start">
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-red-50 text-red-700 border border-red-200 text-[10px]">
+                                                    Списано
+                                                </span>
+                                                @if($item->isUtilized())
+                                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-600 border border-slate-200 text-[10px]">
+                                                        Утилизировано
+                                                    </span>
+                                                @elseif($canManageUtilization)
+                                                    <form method="post" action="{{ route('equipment.utilize', $item) }}" enctype="multipart/form-data" class="flex flex-col gap-1 items-start max-w-[200px]" onsubmit="return confirm('Утилизировать с прикреплённым актом?');">
+                                                        @csrf
+                                                        <input type="file" name="utilization_act" accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required class="text-[9px] max-w-full file:mr-1 file:py-0.5 file:px-1 file:rounded file:border-0 file:bg-violet-100 file:text-violet-800">
+                                                        <button type="submit" class="text-[10px] font-semibold text-violet-700 hover:text-violet-900 underline decoration-dotted text-left">
+                                                            Утилизировать
+                                                        </button>
+                                                    </form>
+                                                @endif
+                                            </div>
                                         @elseif($item->writeoff_status === 'requested')
                                             <span class="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-amber-50 text-amber-700 border border-amber-200 text-[10px]">
                                                 Запрошено

@@ -42,6 +42,7 @@ class ActivityArchiveController extends Controller
         'rejected',
         'writeoff_approved',
         'move_approved',
+        'utilized',
         'revision_restored',
     ];
 
@@ -111,6 +112,7 @@ class ActivityArchiveController extends Controller
             'rejected' => 'Отклонено',
             'writeoff_approved' => 'Списание подтверждено',
             'move_approved' => 'Перемещение подтверждено',
+            'utilized' => 'Утилизировано',
             'revision_restored' => 'Восстановлена версия',
         ];
 
@@ -132,6 +134,7 @@ class ActivityArchiveController extends Controller
             'entityLabels' => $entityLabels,
             'actionLabels' => $actionLabels,
             'filteredCount' => $filteredCount,
+            'filterKeys' => $this->filterQueryKeys(),
         ]);
     }
 

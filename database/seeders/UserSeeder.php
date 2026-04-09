@@ -14,6 +14,7 @@ class UserSeeder extends Seeder
         $adminRoleId = DB::table('roles')->where('name', 'admin')->value('id');
         $userRoleId = DB::table('roles')->where('name', 'user')->value('id');
         $nurseRoleId = DB::table('roles')->where('name', 'senior_nurse')->value('id');
+        $accountantRoleId = DB::table('roles')->where('name', 'accountant')->value('id');
 
         $now = now();
 
@@ -53,6 +54,20 @@ class UserSeeder extends Seeder
                 'patronymic' => null,
                 'password' => Hash::make('password'),
                 'role_id' => $nurseRoleId,
+                'email_verified_at' => $now,
+                'is_active' => true,
+                'date_joined' => $now,
+            ]
+        );
+
+        User::updateOrCreate(
+            ['email' => 'accountant@example.com'],
+            [
+                'first_name' => 'Тестовый',
+                'last_name' => 'Бухгалтер',
+                'patronymic' => null,
+                'password' => Hash::make('password'),
+                'role_id' => $accountantRoleId,
                 'email_verified_at' => $now,
                 'is_active' => true,
                 'date_joined' => $now,

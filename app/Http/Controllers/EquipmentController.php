@@ -13,8 +13,10 @@ use App\Models\EquipmentDocument;
 use App\Models\EquipmentDocumentType;
 use App\Models\ActivityLog;
 use App\Models\Supplier;
+use App\Models\UtilizationState;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -79,7 +81,7 @@ class EquipmentController extends Controller
         $query = Equipment::query()
             ->from('equipment as equipment')
             ->select('equipment.*')
-            ->with(['department', 'cabinet', 'group', 'equipmentType', 'equipmentCondition', 'writeoffState']);
+            ->with(['department', 'cabinet', 'group', 'equipmentType', 'equipmentCondition', 'writeoffState', 'utilizationState']);
 
         if ($search !== '') {
             $term = '%' . trim($search) . '%';
@@ -196,6 +198,7 @@ class EquipmentController extends Controller
             'supplier',
             'serviceOrganization',
             'writeoffState',
+            'utilizationState',
         ]);
 
         $departments = Department::orderBy('name')->get(['id', 'name']);
@@ -287,9 +290,9 @@ class EquipmentController extends Controller
             'images.max' => 'Максимум 5 фотографий.',
         ]);
         $validated =         $request->validate([
-            'document_registration_certificate' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
-            'document_instruction' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
-            'document_commissioning_act' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
+            'document_registration_certificate' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
+            'document_instruction' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
+            'document_commissioning_act' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
             'number' => ['required', 'integer', 'min:1', Rule::unique('equipment', 'number')->whereNull('deleted_at')],
             'equipment_type_id' => ['nullable', Rule::exists('equipment_types', 'id')->whereNull('deleted_at')],
             'name' => 'required|string|max:255',
@@ -313,6 +316,13 @@ class EquipmentController extends Controller
             'last_verification_date' => 'nullable|string|max:20',
             'supplier_id' => 'nullable|exists:suppliers,id',
             'service_organization_id' => 'nullable|exists:service_organizations,id',
+        ], [
+            'document_registration_certificate.required' => 'Загрузите регистрационное удостоверение.',
+            'document_instruction.required' => 'Загрузите инструкцию на русском языке.',
+            'document_commissioning_act.required' => 'Загрузите акт ввода в эксплуатацию.',
+            'document_registration_certificate.mimes' => 'Допустимые форматы документов: PDF, Word (.doc, .docx), Excel (.xls, .xlsx).',
+            'document_instruction.mimes' => 'Допустимые форматы документов: PDF, Word (.doc, .docx), Excel (.xls, .xlsx).',
+            'document_commissioning_act.mimes' => 'Допустимые форматы документов: PDF, Word (.doc, .docx), Excel (.xls, .xlsx).',
         ]);
 
         $validated['production_date'] = $request->filled('production_date') ? $request->input('production_date') : null;
@@ -325,6 +335,9 @@ class EquipmentController extends Controller
         $validated['equipment_condition_id'] = $request->filled('equipment_condition_id') ? $validated['equipment_condition_id'] : null;
         $validated['supplier_id'] = $request->filled('supplier_id') ? $validated['supplier_id'] : null;
         $validated['service_organization_id'] = $request->filled('service_organization_id') ? $validated['service_organization_id'] : null;
+        if (! $request->user()?->canAssignInventoryNumber()) {
+            $validated['inventory_number'] = null;
+        }
 
         $equipment = Equipment::create($validated);
         $this->storeEquipmentImages($request->file('images'), $equipment);
@@ -431,6 +444,9 @@ class EquipmentController extends Controller
         $equipment->load(['images', 'documents.documentType']);
         $snapshotBeforeJson = json_encode($this->buildEquipmentSnapshot($equipment), JSON_UNESCAPED_UNICODE);
         $before = $equipment->getAttributes();
+        if (! $request->user()?->canAssignInventoryNumber()) {
+            $validated['inventory_number'] = $equipment->inventory_number;
+        }
 
         $equipment->update($validated);
 
@@ -451,6 +467,150 @@ class EquipmentController extends Controller
         $this->logEquipmentUpdated($equipment, $before, $validDeleteIds, $newFiles, $snapshotBeforeJson);
 
         return redirect()->route('equipment.index')->with('success', 'Оборудование обновлено.');
+    }
+
+    /**
+     * Присвоение/обновление инвентарного номера (только бухгалтер).
+     */
+    public function updateInventoryNumber(Request $request, Equipment $equipment): RedirectResponse
+    {
+        $validated = $request->validate([
+            'equipment_id' => 'nullable|integer',
+            'inventory_number' => 'required|string|max:100',
+        ], [
+            'inventory_number.required' => 'Введите инвентарный номер.',
+            'inventory_number.max' => 'Инвентарный номер не должен превышать 100 символов.',
+        ]);
+
+        $old = $equipment->inventory_number;
+        $new = trim($validated['inventory_number']);
+        if ($old === $new) {
+            return redirect()->route('equipment.index')->with('status', 'Инвентарный номер не изменён.');
+        }
+
+        $equipment->update(['inventory_number' => $new]);
+        ActivityLog::record(
+            Equipment::class,
+            $equipment->id,
+            'updated',
+            '№'.$equipment->number.' — '.$equipment->name,
+            'Инвентарный номер изменён бухгалтером '.(auth()->user()?->name ?? '—').': '
+                .($old ?: '—').' → '.$new.'.',
+        );
+
+        return redirect()->route('equipment.index')->with('success', 'Инвентарный номер сохранён.');
+    }
+
+    /**
+     * Отметка утилизации (только для уже списанного оборудования), с обязательным актом утилизации.
+     */
+    public function markUtilized(Request $request, Equipment $equipment): RedirectResponse
+    {
+        $request->validate([
+            'utilization_act' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
+        ], [
+            'utilization_act.required' => 'Прикрепите файл акта утилизации (PDF, Word или Excel).',
+            'utilization_act.mimes' => 'Допустимые форматы акта: PDF, Word (.doc, .docx), Excel (.xls, .xlsx).',
+        ]);
+
+        $equipment->loadMissing(['writeoffState', 'utilizationState']);
+
+        if (! $equipment->isWrittenOff()) {
+            return redirect()->back()->withErrors([
+                'utilize' => 'Утилизировать можно только оборудование со статусом «Списано».',
+            ]);
+        }
+        if ($equipment->isUtilized()) {
+            return redirect()->back()->with('status', 'Это оборудование уже отмечено как утилизированное.');
+        }
+
+        $utilizedId = UtilizationState::query()->where('code', 'utilized')->value('id');
+        if ($utilizedId === null) {
+            return redirect()->back()->withErrors(['utilize' => 'Справочник состояний утилизации не настроен.']);
+        }
+
+        $typeId = EquipmentDocumentType::idForCode('utilization_act');
+        if ($typeId === null) {
+            return redirect()->back()->withErrors([
+                'utilize' => 'В справочнике нет типа документа «акт утилизации». Выполните миграции.',
+            ]);
+        }
+
+        $equipment->load(['images', 'documents']);
+        $snapshotBeforeJson = json_encode($this->buildEquipmentSnapshot($equipment), JSON_UNESCAPED_UNICODE);
+
+        $this->replaceEquipmentUtilizationAct($equipment, $request->file('utilization_act'), $typeId);
+
+        $equipment->utilization_state_id = $utilizedId;
+        $equipment->save();
+
+        ActivityLog::record(
+            Equipment::class,
+            $equipment->id,
+            'utilized',
+            '№'.$equipment->number.' — '.$equipment->name,
+            'Утилизация с актом: пользователь '.(auth()->user()?->name ?? '—').' прикрепил акт утилизации.',
+            $snapshotBeforeJson,
+        );
+
+        return redirect()->back()->with('success', 'Оборудование утилизировано, акт сохранён. Его можно открыть или скачать в карточке оборудования.');
+    }
+
+    /**
+     * Замена акта утилизации у уже утилизированного оборудования.
+     */
+    public function storeUtilizationAct(Request $request, Equipment $equipment): RedirectResponse
+    {
+        $request->validate([
+            'utilization_act' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
+        ], [
+            'utilization_act.required' => 'Выберите файл акта утилизации.',
+            'utilization_act.mimes' => 'Допустимые форматы: PDF, Word (.doc, .docx), Excel (.xls, .xlsx).',
+        ]);
+
+        if (! $equipment->isUtilized()) {
+            return redirect()->back()->withErrors([
+                'utilization_act' => 'Загрузить или заменить акт можно только для утилизированного оборудования.',
+            ]);
+        }
+
+        $typeId = EquipmentDocumentType::idForCode('utilization_act');
+        if ($typeId === null) {
+            return redirect()->back()->withErrors([
+                'utilization_act' => 'Тип документа «акт утилизации» не найден. Выполните миграции.',
+            ]);
+        }
+
+        $equipment->load(['images', 'documents.documentType']);
+        $snapshotBeforeJson = json_encode($this->buildEquipmentSnapshot($equipment), JSON_UNESCAPED_UNICODE);
+
+        $this->replaceEquipmentUtilizationAct($equipment, $request->file('utilization_act'), $typeId);
+
+        ActivityLog::record(
+            Equipment::class,
+            $equipment->id,
+            'updated',
+            '№'.$equipment->number.' — '.$equipment->name,
+            'Обновлён акт утилизации пользователем '.(auth()->user()?->name ?? '—').'.',
+            $snapshotBeforeJson,
+        );
+
+        return redirect()->back()->with('success', 'Акт утилизации обновлён.');
+    }
+
+    private function replaceEquipmentUtilizationAct(Equipment $equipment, UploadedFile $file, int $typeId): void
+    {
+        $equipment->documents()->where('document_type_id', $typeId)->get()->each(function (EquipmentDocument $doc) {
+            Storage::disk('public')->delete($doc->document);
+            $doc->delete();
+        });
+        $path = $file->store('equipment_documents', 'public');
+        $equipment->documents()->create([
+            'document' => $path,
+            'name' => 'Акт утилизации',
+            'document_type_id' => $typeId,
+            'uploaded_at' => now(),
+        ]);
     }
 
     private function storeEquipmentDocuments(Request $request, Equipment $equipment): void

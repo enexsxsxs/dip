@@ -40,6 +40,7 @@ class Equipment extends Model
         'supplier_id',
         'service_organization_id',
         'writeoff_state_id',
+        'utilization_state_id',
     ];
 
     protected function casts(): array
@@ -59,6 +60,24 @@ class Equipment extends Model
     public function isWrittenOff(): bool
     {
         return $this->writeoff_status === 'approved';
+    }
+
+    public function isUtilized(): bool
+    {
+        return $this->utilization_status === 'utilized';
+    }
+
+    /** Код состояния утилизации (справочник utilization_states, 3НФ). */
+    public function getUtilizationStatusAttribute(): ?string
+    {
+        if (! array_key_exists('utilization_state_id', $this->attributes) || $this->attributes['utilization_state_id'] === null) {
+            return null;
+        }
+        if ($this->relationLoaded('utilizationState')) {
+            return $this->utilizationState?->code;
+        }
+
+        return UtilizationState::query()->whereKey($this->attributes['utilization_state_id'])->value('code');
     }
 
     /** Код состояния списания (столбца writeoff_status в БД нет — связь writeoff_states, 3НФ). */
@@ -84,6 +103,11 @@ class Equipment extends Model
     public function writeoffState(): BelongsTo
     {
         return $this->belongsTo(WriteoffState::class, 'writeoff_state_id');
+    }
+
+    public function utilizationState(): BelongsTo
+    {
+        return $this->belongsTo(UtilizationState::class, 'utilization_state_id');
     }
 
     public function equipmentType(): BelongsTo
