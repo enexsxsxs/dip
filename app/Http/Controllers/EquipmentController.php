@@ -502,6 +502,45 @@ class EquipmentController extends Controller
     }
 
     /**
+     * Обновление даты принятия к учёту (только бухгалтер).
+     */
+    public function updateAcceptedToAccountingDate(Request $request, Equipment $equipment): RedirectResponse
+    {
+        $validated = $request->validate([
+            'equipment_id' => 'nullable|integer',
+            'date_accepted_to_accounting' => 'required|date',
+        ], [
+            'date_accepted_to_accounting.required' => 'Введите дату принятия к учёту.',
+            'date_accepted_to_accounting.date' => 'Дата принятия к учёту указана некорректно.',
+        ]);
+
+        $old = $equipment->date_accepted_to_accounting?->format('Y-m-d');
+        $new = (string) $validated['date_accepted_to_accounting'];
+
+        if ($old === $new) {
+            return redirect()->route('equipment.index')->with('status', 'Дата принятия к учёту не изменена.');
+        }
+
+        $equipment->update([
+            'date_accepted_to_accounting' => $new,
+        ]);
+
+        ActivityLog::record(
+            Equipment::class,
+            $equipment->id,
+            'updated',
+            '№'.$equipment->number.' — '.$equipment->name,
+            'Дата принятия к учёту обновлена бухгалтером по основанию акта учёта: '
+                .($old ? \Carbon\Carbon::parse($old)->format('d.m.Y') : '—')
+                .' → '
+                .\Carbon\Carbon::parse($new)->format('d.m.Y')
+                .'.',
+        );
+
+        return redirect()->route('equipment.index')->with('success', 'Дата принятия к учёту сохранена.');
+    }
+
+    /**
      * Отметка утилизации (только для уже списанного оборудования), с обязательным актом утилизации.
      */
     public function markUtilized(Request $request, Equipment $equipment): RedirectResponse

@@ -1,15 +1,17 @@
 <?php
 
+use App\Http\Controllers\ActivityArchiveController;
 use App\Http\Controllers\CabinetController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\EquipmentController;
+use App\Http\Controllers\EquipmentRequestController;
 use App\Http\Controllers\EquipmentTypeController;
 use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\EquipmentRequestController;
-use App\Http\Controllers\ActivityArchiveController;
+use App\Http\Controllers\RequestLayoutController;
+use App\Http\Controllers\RequestRecordController;
 use App\Http\Controllers\UserController;
-use App\Models\Equipment;
 use App\Models\Department;
+use App\Models\Equipment;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -37,6 +39,8 @@ Route::middleware('auth')->group(function () {
     Route::middleware('accountant')->group(function () {
         Route::patch('/equipment/{equipment}/inventory-number', [EquipmentController::class, 'updateInventoryNumber'])
             ->name('equipment.inventory-number.update');
+        Route::patch('/equipment/{equipment}/accepted-to-accounting-date', [EquipmentController::class, 'updateAcceptedToAccountingDate'])
+            ->name('equipment.accepted-to-accounting-date.update');
     });
 
     Route::middleware(['utilization.manage', 'not.accountant'])->group(function () {
@@ -62,6 +66,9 @@ Route::middleware('auth')->group(function () {
         Route::post('/equipment/{equipment}/requests/move', [EquipmentRequestController::class, 'storeMove'])->name('equipment.requests.move');
     });
 
+    // Заявки: список доступен администратору и бухгалтеру (только просмотр для бухгалтера).
+    Route::get('/equipment-requests', [EquipmentRequestController::class, 'index'])->name('equipment-requests.index');
+
     Route::middleware('admin')->group(function () {
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
@@ -71,8 +78,7 @@ Route::middleware('auth')->group(function () {
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
         Route::patch('/users/{user}/restore', [UserController::class, 'restore'])->name('users.restore');
 
-        // Заявки: список и действия
-        Route::get('/equipment-requests', [EquipmentRequestController::class, 'index'])->name('equipment-requests.index');
+        // Заявки: действия (только администратор)
         Route::post('/equipment/{equipment}/approve-writeoff', [EquipmentRequestController::class, 'approveWriteoff'])->name('equipment.requests.approveWriteoff');
         Route::post('/equipment-requests/{equipmentRequest}/approve-move', [EquipmentRequestController::class, 'approveMove'])->name('equipment-requests.approveMove');
         Route::post('/equipment-requests/{equipmentRequest}/reject', [EquipmentRequestController::class, 'reject'])->name('equipment-requests.reject');
@@ -89,6 +95,23 @@ Route::middleware('auth')->group(function () {
         Route::post('/cabinets', [CabinetController::class, 'store'])->name('cabinets.store');
         Route::delete('/cabinets/{cabinet}', [CabinetController::class, 'destroy'])->name('cabinets.destroy');
 
+        Route::get('/report-layouts', [RequestLayoutController::class, 'index'])->name('report-layouts.index');
+        Route::get('/report-layouts/create', [RequestLayoutController::class, 'create'])->name('report-layouts.create');
+        Route::post('/report-layouts', [RequestLayoutController::class, 'store'])->name('report-layouts.store');
+        Route::get('/report-layouts/{layout}/header-json', [RequestLayoutController::class, 'headerJson'])->name('report-layouts.header-json');
+        Route::get('/report-layouts/{layout}/edit', [RequestLayoutController::class, 'edit'])->name('report-layouts.edit');
+        Route::put('/report-layouts/{layout}', [RequestLayoutController::class, 'update'])->name('report-layouts.update');
+        Route::delete('/report-layouts/{layout}', [RequestLayoutController::class, 'destroy'])->name('report-layouts.destroy');
+
+        Route::get('/report-requests', [RequestRecordController::class, 'index'])->name('report-requests.index');
+        Route::get('/report-requests/create', [RequestRecordController::class, 'create'])->name('report-requests.create');
+        Route::post('/report-requests', [RequestRecordController::class, 'store'])->name('report-requests.store');
+        Route::get('/report-requests/{record}/edit', [RequestRecordController::class, 'edit'])->name('report-requests.edit');
+        Route::put('/report-requests/{record}', [RequestRecordController::class, 'update'])->name('report-requests.update');
+        Route::delete('/report-requests/{record}', [RequestRecordController::class, 'destroy'])->name('report-requests.destroy');
+        Route::get('/report-requests/{record}', [RequestRecordController::class, 'show'])->name('report-requests.show');
+        Route::get('/report-requests/{record}/pdf', [RequestRecordController::class, 'pdf'])->name('report-requests.pdf');
+
         Route::get('/admin/activity-archive', [ActivityArchiveController::class, 'index'])->name('admin.activity-archive');
         Route::post('/admin/activity-archive/clear', [ActivityArchiveController::class, 'clear'])->name('admin.activity-archive.clear');
         Route::post('/admin/activity-archive/clear-filtered', [ActivityArchiveController::class, 'clearFiltered'])->name('admin.activity-archive.clear-filtered');
@@ -97,6 +120,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/admin/activity-archive/equipment-type/{id}/restore', [ActivityArchiveController::class, 'restoreEquipmentType'])->name('admin.activity-archive.restore-equipment-type')->whereNumber('id');
         Route::post('/admin/activity-archive/department/{id}/restore', [ActivityArchiveController::class, 'restoreDepartment'])->name('admin.activity-archive.restore-department')->whereNumber('id');
         Route::post('/admin/activity-archive/cabinet/{id}/restore', [ActivityArchiveController::class, 'restoreCabinet'])->name('admin.activity-archive.restore-cabinet')->whereNumber('id');
+        Route::post('/admin/activity-archive/request-layout/{id}/restore', [ActivityArchiveController::class, 'restoreRequestLayout'])->name('admin.activity-archive.restore-request-layout')->whereNumber('id');
+        Route::post('/admin/activity-archive/report-request/{id}/restore', [ActivityArchiveController::class, 'restoreReportRequest'])->name('admin.activity-archive.restore-report-request')->whereNumber('id');
         Route::post('/admin/activity-archive/{id}/restore', [ActivityArchiveController::class, 'restore'])->name('admin.activity-archive.restore');
     });
 });

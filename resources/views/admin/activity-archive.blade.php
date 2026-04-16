@@ -72,10 +72,38 @@
             </div>
         @endif
 
-        @if ($trashedEquipmentTypes->isNotEmpty() || $trashedDepartments->isNotEmpty() || $trashedCabinets->isNotEmpty())
+        @if ($trashedReportRequests->isNotEmpty())
+            <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 border-l-4 border-teal-500">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Скрытые заявки по макетам (PDF)</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Заявки не отображаются в общем списке, данные и PDF сохраняются. Можно восстановить или открыть редактирование.</p>
+                <ul class="divide-y divide-gray-200 dark:divide-gray-600">
+                    @foreach ($trashedReportRequests as $item)
+                        <li class="py-3 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <span class="font-medium text-gray-900 dark:text-gray-100">№{{ $item->id }} — {{ $item->layout?->title ?? '—' }}</span>
+                                <span class="text-xs text-gray-500 block mt-0.5">Скрыто: {{ $item->deleted_at?->format('d.m.Y H:i') ?? '—' }}</span>
+                            </div>
+                            <div class="flex flex-wrap gap-2 items-center">
+                                <a href="{{ route('report-requests.edit', $item) }}" class="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">Изменить</a>
+                                <a href="{{ route('report-requests.pdf', $item) }}" class="text-sm text-gray-600 dark:text-gray-400 hover:underline">PDF</a>
+                                <form method="post" action="{{ route('admin.activity-archive.restore-report-request', $item->id) }}" class="inline"
+                                      onsubmit="return confirm('Вернуть заявку в общий список?');">
+                                    @csrf
+                                    <button type="submit" class="inline-flex items-center px-4 py-2 bg-teal-600 text-white text-sm font-medium rounded-lg hover:bg-teal-700">
+                                        Восстановить
+                                    </button>
+                                </form>
+                            </div>
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        @if ($trashedEquipmentTypes->isNotEmpty() || $trashedDepartments->isNotEmpty() || $trashedCabinets->isNotEmpty() || $trashedRequestLayouts->isNotEmpty())
             <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 border-l-4 border-violet-400">
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Удалённые справочники</h3>
-                <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Виды оборудования, отделы и кабинеты скрыты из списков настроек, но остаются в базе. Восстановление вернёт их в выбор при редактировании оборудования и в заявках.</p>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Виды оборудования, отделы, кабинеты и макеты заявок скрыты из списков настроек, но остаются в базе. Восстановление вернёт их в выбор при редактировании оборудования, при создании заявок по макету и в справочниках.</p>
 
                 @if ($trashedEquipmentTypes->isNotEmpty())
                     <h4 class="text-sm font-semibold text-gray-800 dark:text-gray-200 mt-4 mb-2">Виды оборудования</h4>
@@ -133,13 +161,35 @@
                         @endforeach
                     </ul>
                 @endif
+
+                @if ($trashedRequestLayouts->isNotEmpty())
+                    <h4 class="text-sm font-semibold text-gray-800 dark:text-gray-200 mt-4 mb-2">Макеты заявок (PDF)</h4>
+                    <ul class="divide-y divide-gray-200 dark:divide-gray-600">
+                        @foreach ($trashedRequestLayouts as $item)
+                            <li class="py-2 flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                    <span class="font-medium text-gray-900 dark:text-gray-100">{{ $item->title }}</span>
+                                    <span class="text-xs text-gray-500 block">Скрыто: {{ $item->deleted_at?->format('d.m.Y H:i') ?? '—' }}</span>
+                                </div>
+                                <div class="flex flex-wrap gap-2 items-center">
+                                    <a href="{{ route('report-layouts.edit', $item) }}" class="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">Изменить</a>
+                                    <form method="post" action="{{ route('admin.activity-archive.restore-request-layout', $item->id) }}" class="inline"
+                                          onsubmit="return confirm('Вернуть макет в список без редактирования?');">
+                                        @csrf
+                                        <button type="submit" class="inline-flex items-center px-3 py-1.5 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700">Восстановить</button>
+                                    </form>
+                                </div>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
             </div>
         @endif
 
         <div class="bg-white dark:bg-gray-800 shadow-sm sm:rounded-lg p-6 space-y-6">
             <div>
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Единый журнал</h3>
-                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Фильтры помогают найти записи. Удаление из списков (оборудование, справочники) и увольнения можно отменить блоками выше. В журнале — только удаление строк истории.</p>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Фильтры помогают найти записи. Удаление из списков (оборудование, заявки по макетам, справочники, макеты заявок) и увольнения можно отменить блоками выше. В журнале — только удаление строк истории.</p>
             </div>
 
             <form method="get" action="{{ route('admin.activity-archive') }}" class="rounded-lg border border-gray-200 dark:border-gray-600 p-4 bg-gray-50/80 dark:bg-gray-900/40">

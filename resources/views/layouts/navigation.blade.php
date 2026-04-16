@@ -19,10 +19,26 @@
                     <x-nav-link :href="route('equipment.index')" :active="request()->routeIs('equipment.*')">
                         Список оборудования
                     </x-nav-link>
-                    @if(Auth::user()->isAdmin())
+                    @if(Auth::user()->isAdmin() || Auth::user()->isAccountant())
                         <x-nav-link :href="route('equipment-requests.index')" :active="request()->routeIs('equipment-requests.*')">
                             Заявки
                         </x-nav-link>
+                    @endif
+                    @if(Auth::user()->isAdmin())
+                        <x-dropdown align="left" width="56">
+                            <x-slot name="trigger">
+                                <button class="inline-flex items-center min-h-[48px] px-4 py-3 text-base font-medium text-slate-700 rounded-xl hover:bg-teal-50 hover:text-teal-700 focus:outline-none transition border border-transparent hover:border-teal-100">
+                                    Отчёты и макеты
+                                    <svg class="ms-1 h-5 w-5 text-slate-500" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                    </svg>
+                                </button>
+                            </x-slot>
+                            <x-slot name="content">
+                                <x-dropdown-link :href="route('report-layouts.index')">Макеты заявок</x-dropdown-link>
+                                <x-dropdown-link :href="route('report-requests.index')">Заявки по макетам</x-dropdown-link>
+                            </x-slot>
+                        </x-dropdown>
                         <x-dropdown align="left" width="48">
                             <x-slot name="trigger">
                                 <button class="inline-flex items-center min-h-[48px] px-4 py-3 text-base font-medium text-slate-700 rounded-xl hover:bg-teal-50 hover:text-teal-700 focus:outline-none transition border border-transparent hover:border-teal-100">
@@ -85,8 +101,12 @@
         <div class="pt-2 pb-3 space-y-1">
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">Главная</x-responsive-nav-link>
             <x-responsive-nav-link :href="route('equipment.index')" :active="request()->routeIs('equipment.*')">Список оборудования</x-responsive-nav-link>
-            @if(Auth::user()->isAdmin())
+            @if(Auth::user()->isAdmin() || Auth::user()->isAccountant())
                 <x-responsive-nav-link :href="route('equipment-requests.index')" :active="request()->routeIs('equipment-requests.*')">Заявки</x-responsive-nav-link>
+            @endif
+            @if(Auth::user()->isAdmin())
+                <x-responsive-nav-link :href="route('report-layouts.index')" :active="request()->routeIs('report-layouts.*')">Макеты заявок</x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('report-requests.index')" :active="request()->routeIs('report-requests.*')">Заявки по макетам</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('equipment-types.index')" :active="request()->routeIs('equipment-types.*')">Вид оборудования</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('departments.index')" :active="request()->routeIs('departments.*')">Отделы</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('cabinets.index')" :active="request()->routeIs('cabinets.*')">Помещение / Кабинет</x-responsive-nav-link>

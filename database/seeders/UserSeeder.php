@@ -35,8 +35,8 @@ class UserSeeder extends Seeder
         User::updateOrCreate(
             ['email' => 'user@example.com'],
             [
-                'first_name' => 'Пользователь',
-                'last_name' => 'Просмотр',
+                'first_name' => 'Э.Г.',
+                'last_name' => 'Гайдарова',
                 'patronymic' => null,
                 'password' => Hash::make('password'),
                 'role_id' => $userRoleId,
@@ -49,8 +49,8 @@ class UserSeeder extends Seeder
         User::updateOrCreate(
             ['email' => 'nurse@example.com'],
             [
-                'first_name' => 'Старшая',
-                'last_name' => 'Медсестра',
+                'first_name' => 'О.Н.',
+                'last_name' => 'Ефарова',
                 'patronymic' => null,
                 'password' => Hash::make('password'),
                 'role_id' => $nurseRoleId,
@@ -73,5 +73,6 @@ class UserSeeder extends Seeder
                 'date_joined' => $now,
             ]
         );
+
     }
 }

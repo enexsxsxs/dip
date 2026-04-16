@@ -1,0 +1,34 @@
+Команды для запуска Laravel-проекта после скачивания с GitHub (PowerShell)
+
+1) Откройте терминал в этой папке:
+cd C:\Users\Lenchik\Desktop\dip\laravel
+
+2) Установите зависимости и выполните базовую настройку:
+composer install
+copy .env.example .env
+php artisan key:generate
+
+3) Откройте файл .env и укажите данные вашей базы:
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=your_db_name
+DB_USERNAME=root
+DB_PASSWORD=
+
+ВАРИАНТ A (если используете миграции и сидеры Laravel):
+php artisan migrate --seed
+
+ВАРИАНТ B (если есть дамп .sql из phpMyAdmin):
+# Импортируйте .sql в свою базу через phpMyAdmin -> Импорт
+# После этого команду migrate --seed можно не выполнять
+
+4) Финальные команды для проекта:
+php artisan storage:link
+npm install
+npm run dev
+php artisan serve
+
+Если npm в проекте не нужен, пропустите:
+npm install
+npm run dev

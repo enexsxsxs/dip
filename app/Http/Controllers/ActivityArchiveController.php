@@ -11,6 +11,8 @@ use App\Models\EquipmentDocumentType;
 use App\Models\EquipmentImage;
 use App\Models\EquipmentRequest;
 use App\Models\EquipmentType;
+use App\Models\RequestLayout;
+use App\Models\RequestRecord;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -30,6 +32,8 @@ class ActivityArchiveController extends Controller
         EquipmentType::class,
         Department::class,
         Cabinet::class,
+        RequestLayout::class,
+        RequestRecord::class,
     ];
 
     /** Допустимые значения фильтра «действие». */
@@ -64,6 +68,11 @@ class ActivityArchiveController extends Controller
             ->orderByDesc('deleted_at')
             ->get(['id', 'number', 'name', 'deleted_at']);
 
+        $trashedReportRequests = RequestRecord::onlyTrashed()
+            ->with(['layout'])
+            ->orderByDesc('deleted_at')
+            ->get(['id', 'request_layout_id', 'deleted_at']);
+
         $trashedEquipmentTypes = EquipmentType::onlyTrashed()
             ->orderByDesc('deleted_at')
             ->get(['id', 'name', 'deleted_at']);
@@ -75,6 +84,10 @@ class ActivityArchiveController extends Controller
         $trashedCabinets = Cabinet::onlyTrashed()
             ->orderByDesc('deleted_at')
             ->get(['id', 'number', 'deleted_at']);
+
+        $trashedRequestLayouts = RequestLayout::onlyTrashed()
+            ->orderByDesc('deleted_at')
+            ->get(['id', 'title', 'deleted_at']);
 
         $inactiveUsers = User::query()
             ->where('is_active', false)
@@ -101,6 +114,8 @@ class ActivityArchiveController extends Controller
             EquipmentType::class => 'Вид оборудования',
             Department::class => 'Отдел',
             Cabinet::class => 'Кабинет',
+            RequestLayout::class => 'Макет заявки (PDF)',
+            RequestRecord::class => 'Заявка по макету (PDF)',
         ];
 
         $actionLabels = [
@@ -126,9 +141,11 @@ class ActivityArchiveController extends Controller
         return view('admin.activity-archive', [
             'entries' => $entries,
             'trashedEquipment' => $trashedEquipment,
+            'trashedReportRequests' => $trashedReportRequests,
             'trashedEquipmentTypes' => $trashedEquipmentTypes,
             'trashedDepartments' => $trashedDepartments,
             'trashedCabinets' => $trashedCabinets,
+            'trashedRequestLayouts' => $trashedRequestLayouts,
             'inactiveUsers' => $inactiveUsers,
             'usersForFilter' => $usersForFilter,
             'entityLabels' => $entityLabels,
@@ -270,6 +287,43 @@ class ActivityArchiveController extends Controller
         return redirect()
             ->route('admin.activity-archive')
             ->with('status', 'Кабинет/помещение снова доступно в справочнике.');
+    }
+
+    public function restoreRequestLayout(int $id): RedirectResponse
+    {
+        $layout = RequestLayout::onlyTrashed()->findOrFail($id);
+        $layout->restore();
+
+        ActivityLog::record(
+            RequestLayout::class,
+            $layout->id,
+            'restored',
+            $layout->title,
+            'Макет заявки восстановлен из архива.',
+        );
+
+        return redirect()
+            ->route('admin.activity-archive')
+            ->with('status', 'Макет снова в списке и доступен при создании заявки.');
+    }
+
+    public function restoreReportRequest(int $id): RedirectResponse
+    {
+        $record = RequestRecord::onlyTrashed()->findOrFail($id);
+        $record->load('layout');
+        $record->restore();
+
+        ActivityLog::record(
+            RequestRecord::class,
+            $record->id,
+            'restored',
+            'Заявка №'.($record->registry_number ?? $record->id).' — '.($record->layout?->title ?? '—'),
+            'Заявка по макету восстановлена из архива.',
+        );
+
+        return redirect()
+            ->route('admin.activity-archive')
+            ->with('status', 'Заявка снова в общем списке.');
     }
 
     /**

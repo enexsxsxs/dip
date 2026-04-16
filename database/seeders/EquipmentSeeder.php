@@ -87,7 +87,7 @@ class EquipmentSeeder extends Seeder
     {
         $rows = [
             [
-                'number' => 30,
+                'number' => 1,
                 'type' => 'Стерилизатор ИК',
                 'name' => 'Московский Авциационный Институт СТ-ИК-МАИ',
                 'serial_number' => '1.0 224',
@@ -97,7 +97,7 @@ class EquipmentSeeder extends Seeder
                 'cabinet' => 'КДП 4',
             ],
             [
-                'number' => 32,
+                'number' => 2,
                 'type' => 'Стерилизатор паровой (автоклав)',
                 'name' => 'Melag Vacuklav 23 B+',
                 'serial_number' => '201823-B1279',
@@ -107,7 +107,7 @@ class EquipmentSeeder extends Seeder
                 'cabinet' => 'Опер блок',
             ],
             [
-                'number' => 400,
+                'number' => 3,
                 'type' => 'Стерилизатор паровой кассетный',
                 'name' => 'STATIM 5000S',
                 'serial_number' => '140717100009',
@@ -117,7 +117,7 @@ class EquipmentSeeder extends Seeder
                 'cabinet' => 'Опер блок',
             ],
             [
-                'number' => 10,
+                'number' => 4,
                 'type' => 'Стерилизатор озоновый',
                 'name' => 'Орион-Си ОП1-М (Orion-C OP1-M)',
                 'serial_number' => '2137',

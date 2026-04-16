@@ -18,10 +18,15 @@
             .link-large { font-size: 1rem; padding: 0.35em 0; }
         </style>
     </head>
-    <body class="antialiased min-h-screen bg-[#a8bcc9]">
+    <body @class([
+            'antialiased min-h-screen',
+            'bg-slate-200' => request()->routeIs('report-layouts.*') || request()->routeIs('report-requests.*'),
+            'bg-[#a8bcc9]' => ! (request()->routeIs('report-layouts.*') || request()->routeIs('report-requests.*')),
+        ])>
         @php
             // Страницы, где контент должен быть во всю ширину
-            $isWideLayout = request()->routeIs('dashboard') || request()->routeIs('equipment.index');
+            $isWideLayout = request()->routeIs('dashboard') || request()->routeIs('equipment.index')
+                || request()->routeIs('report-layouts.*') || request()->routeIs('report-requests.*');
             $containerClasses = $isWideLayout
                 ? 'w-full'
                 : 'max-w-7xl mx-auto';
@@ -30,7 +35,7 @@
         @include('layouts.navigation')
 
         @isset($header)
-            <header class="bg-white/90 backdrop-blur border-b border-teal-100 shadow-sm">
+            <header class="bg-white/95 backdrop-blur border-b border-slate-200/80 shadow-sm">
                 <div class="{{ $containerClasses }} py-5 px-4 sm:px-6 lg:px-8">
                     {{ $header }}
                 </div>

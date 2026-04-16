@@ -18,6 +18,10 @@ class EquipmentRequestController extends Controller
      */
     public function index(Request $request): View
     {
+        if (! $request->user()?->isAdmin() && ! $request->user()?->isAccountant()) {
+            abort(403, 'Доступ к списку заявок разрешён только администратору и бухгалтеру.');
+        }
+
         $query = EquipmentRequest::query()
             ->with(['equipment', 'user', 'fromDepartment', 'toDepartment', 'requestType', 'requestStatus'])
             ->join('equipment_request_statuses as ers', 'equipment_requests.request_status_id', '=', 'ers.id')

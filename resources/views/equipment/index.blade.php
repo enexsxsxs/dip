@@ -62,6 +62,11 @@
                 {{ $errors->first('inventory_number') }}
             </div>
         @endif
+        @if ($errors->has('date_accepted_to_accounting'))
+            <div class="rounded-xl border border-red-200 bg-red-50 text-red-800 px-4 py-3 text-sm">
+                {{ $errors->first('date_accepted_to_accounting') }}
+            </div>
+        @endif
         @if ($errors->has('utilize'))
             <div class="rounded-xl border border-red-200 bg-red-50 text-red-800 px-4 py-3 text-sm">
                 {{ $errors->first('utilize') }}
@@ -297,7 +302,24 @@
                                     <td data-col="col-serial" class="px-2 py-1.5 text-slate-600 whitespace-nowrap">{{ $item->serial_number ?? '—' }}</td>
                                     <td data-col="col-production-date" class="px-2 py-1.5 text-slate-600 whitespace-nowrap">{{ $item->production_date?->format('d.m.Y') ?? '—' }}</td>
                                     <td data-col="col-year" class="px-2 py-1.5 text-slate-600">{{ $item->year_of_manufacture ?? '—' }}</td>
-                                    <td data-col="col-accepted-date" class="px-2 py-1.5 text-slate-600 whitespace-nowrap">{{ $item->date_accepted_to_accounting?->format('d.m.Y') ?? '—' }}</td>
+                                    <td data-col="col-accepted-date" class="px-2 py-1.5 text-slate-600 whitespace-nowrap">
+                                        @if($canAssignInventoryNumber)
+                                            <form method="post" action="{{ route('equipment.accepted-to-accounting-date.update', $item) }}" class="flex items-center gap-2">
+                                                @csrf
+                                                @method('PATCH')
+                                                <input type="hidden" name="equipment_id" value="{{ $item->id }}">
+                                                <input type="date" name="date_accepted_to_accounting"
+                                                       value="{{ old('equipment_id') == $item->id ? old('date_accepted_to_accounting', $item->date_accepted_to_accounting?->format('Y-m-d')) : $item->date_accepted_to_accounting?->format('Y-m-d') }}"
+                                                       class="w-36 rounded-md border-slate-300 text-[11px] py-1 px-2"
+                                                       required>
+                                                <button type="submit" class="px-2 py-1 rounded bg-teal-600 text-white text-[10px] font-semibold hover:bg-teal-700">
+                                                    Сохранить
+                                                </button>
+                                            </form>
+                                        @else
+                                            {{ $item->date_accepted_to_accounting?->format('d.m.Y') ?? '—' }}
+                                        @endif
+                                    </td>
                                     <td data-col="col-inventory" class="px-2 py-1.5 text-slate-600 whitespace-nowrap">
                                         @if($canAssignInventoryNumber)
                                             <form method="post" action="{{ route('equipment.inventory-number.update', $item) }}" class="flex items-center gap-2">

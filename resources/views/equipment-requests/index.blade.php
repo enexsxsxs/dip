@@ -1,3 +1,7 @@
+@php
+    $canProcessRequests = auth()->user()?->isAdmin();
+@endphp
+
 <x-app-layout>
     <x-slot name="header">
         <div class="flex flex-wrap justify-between items-center gap-4">
@@ -113,7 +117,7 @@
                                     @endif
                                 </td>
                                 <td class="px-4 py-3 text-base">
-                                    @if($req->status === 'pending')
+                                    @if($canProcessRequests && $req->status === 'pending')
                                         <div class="flex flex-wrap gap-2">
                                         @if($req->type === 'writeoff')
                                             <form method="post" action="{{ route('equipment.requests.approveWriteoff', $req->equipment) }}" class="inline" onsubmit="return confirm('Подтвердить списание?');">
