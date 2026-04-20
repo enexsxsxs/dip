@@ -51,7 +51,7 @@ class UserController extends Controller
                 'max:255',
                 'unique:'.User::class,
             ],
-            'role' => ['required', 'string', 'in:'.implode(',', User::ROLES)],
+            'role' => ['required', 'string', 'in:'.implode(',', User::LOGIN_ROLES)],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
@@ -105,7 +105,7 @@ class UserController extends Controller
                 'max:255',
                 'unique:users,email,'.$user->id,
             ],
-            'role' => ['required', 'string', 'in:'.implode(',', User::ROLES)],
+            'role' => ['required', 'string', 'in:'.implode(',', User::LOGIN_ROLES)],
         ];
 
         if ($request->filled('password')) {

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -150,9 +151,14 @@ class Equipment extends Model
         return $this->hasMany(EquipmentImage::class);
     }
 
-    public function documents(): HasMany
+    public function documents(): BelongsToMany
     {
-        return $this->hasMany(EquipmentDocument::class);
+        return $this->belongsToMany(
+            EquipmentDocument::class,
+            'equipment_document_equipment',
+            'equipment_id',
+            'equipment_document_id'
+        );
     }
 
     public function activityLogs(): MorphMany

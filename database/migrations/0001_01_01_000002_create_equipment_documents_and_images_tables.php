@@ -17,13 +17,20 @@ return new class extends Migration
             $table->string('code', 32)->unique();
         });
 
-        foreach (['instruction', 'registration_certificate', 'commissioning_act', 'ru_scan', 'utilization_act'] as $code) {
+        foreach ([
+            'instruction',
+            'registration_certificate',
+            'commissioning_act',
+            'ru_scan',
+            'utilization_act',
+            'signed_report_act',
+        ] as $code) {
             DB::table('equipment_document_types')->insert(['code' => $code]);
         }
 
         Schema::create('equipment_documents', function (Blueprint $table) {
             $table->id();
-            $table->string('document', 100);
+            $table->string('document', 255);
             $table->string('name', 255);
             $table->foreignId('document_type_id')->constrained('equipment_document_types')->restrictOnDelete();
             $table->dateTime('uploaded_at');

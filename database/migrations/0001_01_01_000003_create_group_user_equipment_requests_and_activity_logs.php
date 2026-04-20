@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Связь пользователей с группами (составной ключ, без суррогата), заявки по оборудованию, отчёты, журнал.
+ * Связь пользователей с группами (составной ключ), заявки по оборудованию, журнал активности (3НФ).
  */
 return new class extends Migration
 {
@@ -54,15 +54,6 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        Schema::create('reports', function (Blueprint $table) {
-            $table->id();
-            $table->string('title');
-            $table->text('body')->nullable();
-            $table->date('report_date')->nullable();
-            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
-            $table->timestamps();
-        });
-
         Schema::create('activity_logs', function (Blueprint $table) {
             $table->id();
             $table->string('action', 40);
@@ -84,7 +75,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('activity_logs');
-        Schema::dropIfExists('reports');
         Schema::dropIfExists('equipment_requests');
         Schema::dropIfExists('equipment_request_statuses');
         Schema::dropIfExists('equipment_request_types');

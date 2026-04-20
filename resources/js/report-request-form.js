@@ -82,7 +82,13 @@ export function registerReportRequestForm(Alpine) {
             for (const row of this.editableHeaderLines) {
                 const id = row.line_id;
                 if (Object.prototype.hasOwnProperty.call(prev, id)) {
-                    next[id] = String(prev[id] ?? '');
+                    const raw = String(prev[id] ?? '');
+                    // Старые заявки могли хранить role-токены; в форме показываем читаемый текст из макета.
+                    if (/^\{\{\s*role:[a-z0-9_]+\s*\}\}$/i.test(raw.trim())) {
+                        next[id] = String(row.default_text ?? '');
+                    } else {
+                        next[id] = raw;
+                    }
                 } else {
                     next[id] = String(row.default_text ?? '');
                 }

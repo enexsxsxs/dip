@@ -2,18 +2,20 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\Cabinet;
 use App\Models\Department;
 use App\Models\Equipment;
 use App\Models\EquipmentCondition;
+use App\Models\EquipmentDocument;
+use App\Models\EquipmentDocumentType;
 use App\Models\EquipmentType;
 use App\Models\Group;
 use App\Models\ServiceOrganization;
-use App\Models\EquipmentDocument;
-use App\Models\EquipmentDocumentType;
-use App\Models\ActivityLog;
 use App\Models\Supplier;
 use App\Models\UtilizationState;
+use App\Support\OriginalFilenameStorage;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -55,19 +57,19 @@ class EquipmentController extends Controller
         $filterCabinet = $request->input('filter_cabinet', []);
         $filterGroup = $request->input('filter_group', []);
         $filterCondition = $request->input('filter_condition', []);
-        if (!is_array($filterEtype)) {
+        if (! is_array($filterEtype)) {
             $filterEtype = $filterEtype ? explode(',', $filterEtype) : [];
         }
-        if (!is_array($filterDepartment)) {
+        if (! is_array($filterDepartment)) {
             $filterDepartment = $filterDepartment ? explode(',', $filterDepartment) : [];
         }
-        if (!is_array($filterCabinet)) {
+        if (! is_array($filterCabinet)) {
             $filterCabinet = $filterCabinet ? explode(',', $filterCabinet) : [];
         }
-        if (!is_array($filterGroup)) {
+        if (! is_array($filterGroup)) {
             $filterGroup = $filterGroup ? explode(',', $filterGroup) : [];
         }
-        if (!is_array($filterCondition)) {
+        if (! is_array($filterCondition)) {
             $filterCondition = $filterCondition ? explode(',', $filterCondition) : [];
         }
 
@@ -84,7 +86,7 @@ class EquipmentController extends Controller
             ->with(['department', 'cabinet', 'group', 'equipmentType', 'equipmentCondition', 'writeoffState', 'utilizationState']);
 
         if ($search !== '') {
-            $term = '%' . trim($search) . '%';
+            $term = '%'.trim($search).'%';
             $query->where(function ($q) use ($term) {
                 $q->where('equipment.name', 'like', $term)
                     ->orWhere('equipment.inventory_number', 'like', $term)
@@ -100,38 +102,38 @@ class EquipmentController extends Controller
             });
         }
 
-        if (!empty($filterEtype)) {
+        if (! empty($filterEtype)) {
             $query->whereIn('equipment.equipment_type_id', $filterEtype);
         }
-        if (!empty($filterDepartment)) {
+        if (! empty($filterDepartment)) {
             $query->whereIn('equipment.department_id', $filterDepartment);
         }
-        if (!empty($filterCabinet)) {
+        if (! empty($filterCabinet)) {
             $query->whereIn('equipment.cabinet_id', $filterCabinet);
         }
-        if (!empty($filterGroup)) {
+        if (! empty($filterGroup)) {
             $query->whereIn('equipment.group_id', $filterGroup);
         }
-        if (!empty($filterCondition)) {
+        if (! empty($filterCondition)) {
             $query->whereIn('equipment.equipment_condition_id', $filterCondition);
         }
         if ($filterName !== '') {
-            $query->where('equipment.name', 'like', '%' . trim($filterName) . '%');
+            $query->where('equipment.name', 'like', '%'.trim($filterName).'%');
         }
         if ($filterSerial !== '') {
-            $query->where('equipment.serial_number', 'like', '%' . trim($filterSerial) . '%');
+            $query->where('equipment.serial_number', 'like', '%'.trim($filterSerial).'%');
         }
         if ($filterYear !== '') {
-            $query->where('equipment.year_of_manufacture', 'like', '%' . trim($filterYear) . '%');
+            $query->where('equipment.year_of_manufacture', 'like', '%'.trim($filterYear).'%');
         }
         if ($filterInventory !== '') {
-            $query->where('equipment.inventory_number', 'like', '%' . trim($filterInventory) . '%');
+            $query->where('equipment.inventory_number', 'like', '%'.trim($filterInventory).'%');
         }
         if ($filterRu !== '') {
-            $query->where('equipment.ru_number', 'like', '%' . trim($filterRu) . '%');
+            $query->where('equipment.ru_number', 'like', '%'.trim($filterRu).'%');
         }
         if ($filterGrsi !== '') {
-            $query->where('equipment.grsi', 'like', '%' . trim($filterGrsi) . '%');
+            $query->where('equipment.grsi', 'like', '%'.trim($filterGrsi).'%');
         }
 
         $orderColumn = self::SORTABLE_COLUMNS[$sortBy] ?? 'equipment.number';
@@ -215,10 +217,12 @@ class EquipmentController extends Controller
     public function storeDocument(Request $request, Equipment $equipment): RedirectResponse
     {
         $request->validate([
-            'type' => 'required|in:instruction,registration_certificate,commissioning_act,ru_scan',
+            'type' => 'required|in:instruction,registration_certificate,commissioning_act,ru_scan,signed_report_act',
             'document' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
+            'document_name' => 'required_if:type,signed_report_act|nullable|string|max:255',
         ], [
             'document.mimes' => 'Допустимые форматы: PDF, Word (.doc, .docx), Excel (.xls, .xlsx).',
+            'document_name.required_if' => 'Укажите название подписанного акта.',
         ]);
         $type = $request->input('type');
         $file = $request->file('document');
@@ -227,6 +231,7 @@ class EquipmentController extends Controller
             'registration_certificate' => 'Регистрационное удостоверение',
             'commissioning_act' => 'Акт ввода в эксплуатацию',
             'ru_scan' => 'Регистрационное удостоверение',
+            'signed_report_act' => 'Подписанный акт (списание/перемещение)',
         ];
         $equipment->load(['images', 'documents']);
         $snapshotBeforeJson = json_encode($this->buildEquipmentSnapshot($equipment), JSON_UNESCAPED_UNICODE);
@@ -235,24 +240,30 @@ class EquipmentController extends Controller
         if ($typeId === null) {
             return redirect()->back()->with('error', 'Неизвестный тип документа.');
         }
-        $equipment->documents()->where('document_type_id', $typeId)->get()->each(function (EquipmentDocument $doc) {
-            Storage::disk('public')->delete($doc->document);
-            $doc->delete();
-        });
-        $path = $file->store('equipment_documents', 'public');
-        $equipment->documents()->create([
-            'document' => $path,
-            'name' => $labels[$type],
-            'document_type_id' => $typeId,
-            'uploaded_at' => now(),
-        ]);
+        $isSingleByType = in_array($type, ['instruction', 'registration_certificate', 'commissioning_act', 'ru_scan'], true);
+        if ($isSingleByType) {
+            $this->detachEquipmentDocumentsByType($equipment, $typeId);
+        }
+        $customName = trim((string) $request->input('document_name', ''));
+        $originalBase = basename($file->getClientOriginalName());
+        if ($type === 'signed_report_act') {
+            $docName = $customName !== '' ? $customName : ($originalBase !== '' ? $originalBase : 'Подписанный акт');
+        } else {
+            $docName = $customName !== '' ? $customName : ($originalBase !== '' ? $originalBase : $labels[$type]);
+        }
+        $path = OriginalFilenameStorage::storeOnPublicDisk(
+            $file,
+            $this->documentUploadDirectoryForType($equipment, $type),
+            $this->inventoryNumberFilePrefix($equipment)
+        );
+        $this->createAndAttachDocument($equipment, $path, $docName, $typeId);
         $equipment->refresh()->load(['images', 'documents.documentType']);
         ActivityLog::record(
             Equipment::class,
             $equipment->id,
             'updated',
             '№'.$equipment->number.' — '.$equipment->name,
-            'Загружен документ: '.$labels[$type].'.',
+            'Загружен документ: '.$docName.'.',
             $snapshotBeforeJson,
         );
 
@@ -289,7 +300,7 @@ class EquipmentController extends Controller
             'images.min' => 'Нужна минимум 1 фотография.',
             'images.max' => 'Максимум 5 фотографий.',
         ]);
-        $validated =         $request->validate([
+        $validated = $request->validate([
             'document_registration_certificate' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
             'document_instruction' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
             'document_commissioning_act' => 'required|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
@@ -360,6 +371,7 @@ class EquipmentController extends Controller
     public function edit(Equipment $equipment): View
     {
         $equipment->load(['images', 'documents.documentType']);
+
         return view('equipment.edit', [
             'equipment' => $equipment,
             'equipmentTypes' => EquipmentType::orderBy('name')->get(['id', 'name']),
@@ -387,7 +399,7 @@ class EquipmentController extends Controller
         $afterCount = $currentCount - count($validDeleteIds) + $newCount;
         if ($afterCount < 1 || $afterCount > 5) {
             return redirect()->back()->withInput()->withErrors([
-                'images' => 'Должно быть от 1 до 5 фотографий. Сейчас после изменений будет: ' . $afterCount . '.',
+                'images' => 'Должно быть от 1 до 5 фотографий. Сейчас после изменений будет: '.$afterCount.'.',
             ]);
         }
         $request->validate([
@@ -396,7 +408,7 @@ class EquipmentController extends Controller
             'delete_images' => 'nullable|array',
             'delete_images.*' => 'exists:equipment_images,id',
         ]);
-        $validated =         $request->validate([
+        $validated = $request->validate([
             'document_registration_certificate' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
             'document_instruction' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
             'document_commissioning_act' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx|max:20480',
@@ -458,7 +470,7 @@ class EquipmentController extends Controller
             }
         }
         $newFiles = $request->file('images', []);
-        if (!empty($newFiles)) {
+        if (! empty($newFiles)) {
             $this->storeEquipmentImages($newFiles, $equipment);
         }
         $this->storeEquipmentDocuments($request, $equipment);
@@ -488,7 +500,11 @@ class EquipmentController extends Controller
             return redirect()->route('equipment.index')->with('status', 'Инвентарный номер не изменён.');
         }
 
+        $oldInventoryFolder = $this->inventoryNumberFolderByValue($equipment, $old);
         $equipment->update(['inventory_number' => $new]);
+        $equipment->refresh();
+        $this->moveInventoryScopedMediaToInventoryFolder($equipment, $old);
+        $this->deleteDirectoryIfEmpty($oldInventoryFolder);
         ActivityLog::record(
             Equipment::class,
             $equipment->id,
@@ -531,9 +547,9 @@ class EquipmentController extends Controller
             'updated',
             '№'.$equipment->number.' — '.$equipment->name,
             'Дата принятия к учёту обновлена бухгалтером по основанию акта учёта: '
-                .($old ? \Carbon\Carbon::parse($old)->format('d.m.Y') : '—')
+                .($old ? Carbon::parse($old)->format('d.m.Y') : '—')
                 .' → '
-                .\Carbon\Carbon::parse($new)->format('d.m.Y')
+                .Carbon::parse($new)->format('d.m.Y')
                 .'.',
         );
 
@@ -639,17 +655,17 @@ class EquipmentController extends Controller
 
     private function replaceEquipmentUtilizationAct(Equipment $equipment, UploadedFile $file, int $typeId): void
     {
-        $equipment->documents()->where('document_type_id', $typeId)->get()->each(function (EquipmentDocument $doc) {
-            Storage::disk('public')->delete($doc->document);
-            $doc->delete();
-        });
-        $path = $file->store('equipment_documents', 'public');
-        $equipment->documents()->create([
-            'document' => $path,
-            'name' => 'Акт утилизации',
-            'document_type_id' => $typeId,
-            'uploaded_at' => now(),
-        ]);
+        $this->detachEquipmentDocumentsByType($equipment, $typeId);
+        $path = OriginalFilenameStorage::storeOnPublicDisk(
+            $file,
+            $this->documentUploadDirectoryForType($equipment, 'utilization_act'),
+            $this->inventoryNumberFilePrefix($equipment)
+        );
+        $actName = basename($file->getClientOriginalName());
+        if ($actName === '' || $actName === '.') {
+            $actName = 'Акт утилизации';
+        }
+        $this->createAndAttachDocument($equipment, $path, $actName, $typeId);
     }
 
     private function storeEquipmentDocuments(Request $request, Equipment $equipment): void
@@ -661,37 +677,246 @@ class EquipmentController extends Controller
         ];
         foreach ($documentMap as $typeCode => [$key, $label]) {
             $file = $request->file($key);
-            if (!$file || !$file->isValid()) {
+            if (! $file || ! $file->isValid()) {
                 continue;
             }
             $typeId = EquipmentDocumentType::idForCode($typeCode);
             if ($typeId === null) {
                 continue;
             }
-            $existing = $equipment->documents()->where('document_type_id', $typeId)->get();
-            foreach ($existing as $doc) {
-                Storage::disk('public')->delete($doc->document);
-                $doc->delete();
+            $this->detachEquipmentDocumentsByType($equipment, $typeId);
+            $path = OriginalFilenameStorage::storeOnPublicDisk(
+                $file,
+                $this->documentUploadDirectoryForType($equipment, $typeCode),
+                $this->inventoryNumberFilePrefix($equipment)
+            );
+            $displayName = basename($file->getClientOriginalName());
+            if ($displayName === '' || $displayName === '.') {
+                $displayName = $label;
             }
-            $path = $file->store('equipment_documents', 'public');
-            $equipment->documents()->create([
-                'document' => $path,
-                'name' => $label,
-                'document_type_id' => $typeId,
-                'uploaded_at' => now(),
-            ]);
+            $this->createAndAttachDocument($equipment, $path, $displayName, $typeId);
         }
+    }
+
+    private function createAndAttachDocument(Equipment $equipment, string $path, string $name, int $typeId): void
+    {
+        $doc = EquipmentDocument::query()->create([
+            'document' => $path,
+            'name' => $name,
+            'document_type_id' => $typeId,
+            'uploaded_at' => now(),
+        ]);
+
+        $equipment->documents()->syncWithoutDetaching([$doc->id]);
+    }
+
+    private function detachEquipmentDocumentsByType(Equipment $equipment, int $typeId): void
+    {
+        $docs = $equipment->documents()->where('document_type_id', $typeId)->get();
+        foreach ($docs as $doc) {
+            $equipment->documents()->detach($doc->id);
+            $this->deleteDocumentIfUnused($doc);
+        }
+    }
+
+    private function deleteDocumentIfUnused(EquipmentDocument $doc): void
+    {
+        if ($doc->equipment()->exists()) {
+            return;
+        }
+
+        Storage::disk('public')->delete($doc->document);
+        $doc->delete();
     }
 
     private function storeEquipmentImages(array $files, Equipment $equipment): void
     {
         foreach ($files as $file) {
-            if (!$file->isValid()) {
+            if (! $file->isValid()) {
                 continue;
             }
-            $path = $file->store('equipment', 'public');
+            $path = OriginalFilenameStorage::storeOnPublicDisk(
+                $file,
+                $this->equipmentImagesDirectory($equipment),
+                $this->inventoryNumberFilePrefix($equipment)
+            );
             $equipment->images()->create(['image' => $path]);
         }
+    }
+
+    private function equipmentImagesDirectory(Equipment $equipment): string
+    {
+        return $this->inventoryNumberFolder($equipment).'/фото';
+    }
+
+    private function documentUploadDirectoryForType(Equipment $equipment, string $typeCode): string
+    {
+        $dir = match ($typeCode) {
+            'registration_certificate', 'ru_scan' => $this->catalogRoot().'/1_регистрационное_удостоверение',
+            'instruction' => $this->catalogRoot().'/2_инструкция_на_русском_языке',
+            'commissioning_act' => $this->catalogRoot().'/3_акт_ввода_в_эксплуатацию',
+            default => $this->inventoryNumberFolder($equipment).'/прочие_документы',
+        };
+
+        return $dir;
+    }
+
+    private function catalogRoot(): string
+    {
+        return 'каталог_оборудования';
+    }
+
+    private function inventoryNumberFolder(Equipment $equipment): string
+    {
+        return $this->inventoryNumberFolderByValue($equipment, $equipment->inventory_number);
+    }
+
+    private function inventoryNumberFolderByValue(Equipment $equipment, ?string $inventoryValue): string
+    {
+        $inventory = trim((string) $inventoryValue);
+        if ($inventory === '') {
+            $inventory = 'без_инвентарного_номера_'.$equipment->id;
+        }
+
+        $inventory = preg_replace('/[^\p{L}\p{N}\s._\-№]/u', '_', $inventory) ?? '';
+        $inventory = trim(preg_replace('/_+/u', '_', $inventory) ?? '', '_ ');
+        if ($inventory === '') {
+            $inventory = 'без_инвентарного_номера_'.$equipment->id;
+        }
+
+        return $this->catalogRoot().'/4_инвентарные_номера/'.$inventory;
+    }
+
+    private function inventoryNumberFilePrefix(Equipment $equipment): string
+    {
+        $inventory = trim((string) $equipment->inventory_number);
+
+        return $inventory !== '' ? $inventory : 'без_инвентарного_номера_'.$equipment->id;
+    }
+
+    private function moveInventoryScopedMediaToInventoryFolder(Equipment $equipment, ?string $oldInventoryValue = null): void
+    {
+        $targetImagesDir = $this->equipmentImagesDirectory($equipment);
+        $prefix = $this->inventoryNumberFilePrefix($equipment);
+        $oldPrefix = $this->inventoryNumberPrefixFromValue($equipment, $oldInventoryValue);
+        foreach ($equipment->images()->get() as $image) {
+            $image->image = $this->movePathToDirectory($image->image, $targetImagesDir, $prefix, $oldPrefix);
+            $image->save();
+        }
+        $docs = $equipment->documents()
+            ->get();
+
+        foreach ($docs as $doc) {
+            if ($doc->equipment()->count() > 1) {
+                continue;
+            }
+            $typeCode = (string) ($doc->type ?? '');
+            $targetDocDir = $this->documentUploadDirectoryForType($equipment, $typeCode);
+            $doc->document = $this->movePathToDirectory($doc->document, $targetDocDir, $prefix, $oldPrefix);
+            $doc->name = $this->renameDocumentTitleByInventory($doc->name, $prefix, $oldPrefix);
+            $doc->save();
+        }
+
+        foreach ($equipment->requests()->whereNotNull('photo')->get() as $req) {
+            $req->photo = $this->movePathToDirectory(
+                (string) $req->photo,
+                $this->inventoryNumberFolder($equipment).'/прочие_документы',
+                $prefix,
+                $oldPrefix
+            );
+            $req->save();
+        }
+    }
+
+    private function movePathToDirectory(
+        string $sourcePath,
+        string $targetDir,
+        ?string $filenamePrefix = null,
+        ?string $oldFilenamePrefix = null
+    ): string
+    {
+        $disk = Storage::disk('public');
+        $sourcePath = trim(str_replace('\\', '/', $sourcePath), '/');
+        $targetDir = trim(str_replace('\\', '/', $targetDir), '/');
+        if ($sourcePath === '') {
+            return $sourcePath;
+        }
+        if (! $disk->exists($sourcePath)) {
+            return $sourcePath;
+        }
+
+        $targetBasename = basename($sourcePath);
+        $safePrefix = $this->sanitizePathSegment((string) ($filenamePrefix ?? ''));
+        $safeOldPrefix = $this->sanitizePathSegment((string) ($oldFilenamePrefix ?? ''));
+        if ($safeOldPrefix !== '' && str_starts_with($targetBasename, $safeOldPrefix.'_')) {
+            $targetBasename = (string) mb_substr($targetBasename, mb_strlen($safeOldPrefix) + 1);
+        }
+        if ($safePrefix !== '' && ! str_starts_with($targetBasename, $safePrefix.'_')) {
+            $targetBasename = $safePrefix.'_'.$targetBasename;
+        }
+
+        $targetPath = $targetDir.'/'.$targetBasename;
+        if ($sourcePath === $targetPath) {
+            return $sourcePath;
+        }
+        if ($disk->exists($targetPath)) {
+            $targetPath = $targetDir.'/'.now()->format('Ymd_His').'_'.$targetBasename;
+        }
+
+        $disk->makeDirectory($targetDir);
+        $disk->move($sourcePath, $targetPath);
+
+        return $targetPath;
+    }
+
+    private function inventoryNumberPrefixFromValue(Equipment $equipment, ?string $inventoryValue): string
+    {
+        $inventory = trim((string) $inventoryValue);
+        if ($inventory === '') {
+            return 'без_инвентарного_номера_'.$equipment->id;
+        }
+
+        return $inventory;
+    }
+
+    private function renameDocumentTitleByInventory(string $title, string $newPrefix, ?string $oldPrefix = null): string
+    {
+        $title = trim($title);
+        $safeNewPrefix = $this->sanitizePathSegment($newPrefix);
+        $safeOldPrefix = $this->sanitizePathSegment((string) ($oldPrefix ?? ''));
+
+        if ($safeOldPrefix !== '' && str_starts_with($title, $safeOldPrefix.'_')) {
+            $title = (string) mb_substr($title, mb_strlen($safeOldPrefix) + 1);
+        }
+        if ($safeNewPrefix !== '' && ! str_starts_with($title, $safeNewPrefix.'_')) {
+            $title = $safeNewPrefix.'_'.$title;
+        }
+
+        return $title;
+    }
+
+    private function sanitizePathSegment(string $value): string
+    {
+        $value = trim($value);
+        $value = preg_replace('/[^\p{L}\p{N}\s._\-№]/u', '_', $value) ?? '';
+        $value = trim(preg_replace('/_+/u', '_', $value) ?? '', '_ ');
+
+        return $value;
+    }
+
+    private function deleteDirectoryIfEmpty(string $directory): void
+    {
+        $disk = Storage::disk('public');
+        $directory = trim(str_replace('\\', '/', $directory), '/');
+        if ($directory === '' || ! $disk->exists($directory)) {
+            return;
+        }
+        // Если в каталоге нет файлов, удаляем его целиком вместе с пустыми подпапками.
+        if ($disk->allFiles($directory) !== []) {
+            return;
+        }
+
+        $disk->deleteDirectory($directory);
     }
 
     private function mergeEmptyRelationIds(Request $request): void

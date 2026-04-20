@@ -130,10 +130,6 @@
                                                 <button type="submit" class="min-h-[44px] px-4 py-2 rounded-xl text-base font-semibold text-teal-700 bg-teal-100 hover:bg-teal-200 border border-teal-300">Выполнить перемещение</button>
                                             </form>
                                         @endif
-                                        <form method="post" action="{{ route('equipment-requests.reject', $req) }}" class="inline" onsubmit="return confirm('Отклонить заявку?');">
-                                            @csrf
-                                            <button type="submit" class="min-h-[44px] px-4 py-2 rounded-xl text-base font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200">Отклонить</button>
-                                        </form>
                                         </div>
                                     @else
                                         —

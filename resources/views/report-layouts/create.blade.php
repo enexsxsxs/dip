@@ -9,7 +9,7 @@
         </p>
 
         <form method="post" action="{{ route('report-layouts.store') }}"
-              x-data="reportLayoutForm(@js($initialSchema), @js($headerSourceLayouts ?? []), @js($footerPickUsers ?? []))"
+              x-data="reportLayoutForm(@js($initialSchema), @js($documentHeaders ?? []), @js($initialDocumentHeaderId ?? null), @js($footerPickUsers ?? []))"
               @submit="prepareSubmit()"
               class="space-y-8">
             @csrf
@@ -23,7 +23,7 @@
             <div class="flex items-center gap-3">
                 <input type="hidden" name="has_header" value="0">
                 <input type="checkbox" name="has_header" id="has_header" value="1" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500/30 w-5 h-5" @checked(old('has_header', true))>
-                <label for="has_header" class="text-base text-slate-700 leading-relaxed">Нужна шапка заявления (до трёх блоков в форме ниже)</label>
+                <label for="has_header" class="text-base text-slate-700 leading-relaxed">Нужна шапка заявления (выберите макет шапки в форме ниже)</label>
             </div>
 
             @include('report-layouts.partials.schema-builder')

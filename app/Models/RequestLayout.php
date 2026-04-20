@@ -16,13 +16,10 @@ class RequestLayout extends Model
     protected $fillable = [
         'title',
         'schema',
-        'scores',
         'has_header',
+        'document_header_id',
         'type',
         'version',
-        'approver_id',
-        'user_assigner_id',
-        'division_assigner_id',
     ];
 
     protected function casts(): array
@@ -30,23 +27,35 @@ class RequestLayout extends Model
         return [
             'schema' => 'array',
             'has_header' => 'boolean',
-            'scores' => 'decimal:2',
         ];
     }
 
-    public function divisionAssigner(): BelongsTo
+    public function documentHeader(): BelongsTo
     {
-        return $this->belongsTo(Department::class, 'division_assigner_id');
+        return $this->belongsTo(DocumentHeader::class);
     }
 
-    public function approver(): BelongsTo
+    /**
+     * Схема макета с подставленной шапкой из {@see DocumentHeader}, если задана связь.
+     *
+     * @return array<string, mixed>
+     */
+    public function effectiveSchema(): array
     {
-        return $this->belongsTo(User::class, 'approver_id');
-    }
+        $schema = is_array($this->schema) ? $this->schema : [];
+        if (! $this->document_header_id) {
+            return $schema;
+        }
 
-    public function assigner(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'user_assigner_id');
+        $header = $this->relationLoaded('documentHeader')
+            ? $this->documentHeader
+            : DocumentHeader::query()->find($this->document_header_id);
+
+        if ($header !== null && ! $header->trashed() && is_array($header->schema)) {
+            $schema['header'] = $header->schema;
+        }
+
+        return $schema;
     }
 
     public function requestRecords(): HasMany

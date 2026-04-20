@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\Department;
 use App\Models\Equipment;
-use App\Models\ActivityLog;
 use App\Models\EquipmentRequest;
+use App\Support\OriginalFilenameStorage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -50,6 +51,7 @@ class EquipmentRequestController extends Controller
             'filterType' => $filterType,
         ]);
     }
+
     public function storeWriteoff(Request $request, Equipment $equipment): RedirectResponse
     {
         if (! $request->user()?->isSeniorNurse()) {
@@ -76,7 +78,11 @@ class EquipmentRequestController extends Controller
 
         $photoPath = null;
         if ($request->hasFile('photo') && $request->file('photo')->isValid()) {
-            $photoPath = $request->file('photo')->store('equipment_writeoff_photos', 'public');
+            $photoPath = OriginalFilenameStorage::storeOnPublicDisk(
+                $request->file('photo'),
+                $this->writeoffPhotoDirectory($equipment),
+                $this->inventoryNumberFilePrefix($equipment)
+            );
         }
 
         $equipmentRequest = EquipmentRequest::create([
@@ -220,36 +226,28 @@ class EquipmentRequestController extends Controller
         return back()->with('success', 'Перемещение выполнено. Оборудование перенесено в выбранное отделение.');
     }
 
-    /**
-     * Отклонить заявку (админ).
-     */
-    public function reject(Request $request, EquipmentRequest $equipmentRequest): RedirectResponse
+    private function writeoffPhotoDirectory(Equipment $equipment): string
     {
-        if (! $request->user()?->isAdmin()) {
-            abort(403, 'Только администратор может отклонять заявки.');
+        return 'каталог_оборудования/4_инвентарные_номера/'.$this->inventoryFolderSlug($equipment).'/прочие_документы';
+    }
+
+    private function inventoryFolderSlug(Equipment $equipment): string
+    {
+        $inventory = trim((string) $equipment->inventory_number);
+        if ($inventory === '') {
+            $inventory = 'без_инвентарного_номера_'.$equipment->id;
         }
 
-        if ($equipmentRequest->status !== EquipmentRequest::STATUS_PENDING) {
-            return back()->with('error', 'Эта заявка уже обработана.');
-        }
+        $inventory = preg_replace('/[^\p{L}\p{N}\s._\-№]/u', '_', $inventory) ?? '';
+        $inventory = trim(preg_replace('/_+/u', '_', $inventory) ?? '', '_ ');
 
-        $equipmentRequest->status = EquipmentRequest::STATUS_REJECTED;
-        $equipmentRequest->save();
+        return $inventory !== '' ? $inventory : ('без_инвентарного_номера_'.$equipment->id);
+    }
 
-        if ($equipmentRequest->type === EquipmentRequest::TYPE_WRITEOFF) {
-            $equipmentRequest->equipment->writeoff_status = 'none';
-            $equipmentRequest->equipment->save();
-        }
+    private function inventoryNumberFilePrefix(Equipment $equipment): string
+    {
+        $inventory = trim((string) $equipment->inventory_number);
 
-        ActivityLog::record(
-            EquipmentRequest::class,
-            $equipmentRequest->id,
-            'rejected',
-            'Заявка #'.$equipmentRequest->id.' ('.($equipmentRequest->type ?? '').')',
-            'Заявка отклонена администратором.',
-        );
-
-        return back()->with('success', 'Заявка отклонена.');
+        return $inventory !== '' ? $inventory : 'без_инвентарного_номера_'.$equipment->id;
     }
 }
-

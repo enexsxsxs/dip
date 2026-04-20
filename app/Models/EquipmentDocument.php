@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class EquipmentDocument extends Model
 {
@@ -12,7 +13,7 @@ class EquipmentDocument extends Model
 
     public $timestamps = false;
 
-    protected $fillable = ['document', 'name', 'document_type_id', 'uploaded_at', 'equipment_id'];
+    protected $fillable = ['document', 'name', 'document_type_id', 'uploaded_at'];
 
     protected function casts(): array
     {
@@ -34,9 +35,14 @@ class EquipmentDocument extends Model
         return EquipmentDocumentType::query()->whereKey($this->document_type_id)->value('code');
     }
 
-    public function equipment(): BelongsTo
+    public function equipment(): BelongsToMany
     {
-        return $this->belongsTo(Equipment::class);
+        return $this->belongsToMany(
+            Equipment::class,
+            'equipment_document_equipment',
+            'equipment_document_id',
+            'equipment_id'
+        );
     }
 
     public function documentType(): BelongsTo

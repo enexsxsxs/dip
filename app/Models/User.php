@@ -21,8 +21,14 @@ class User extends Authenticatable
      *
      * @var list<string>
      */
-    /** Ключи ролей (для БД и валидации). */
-    public const ROLES = ['admin', 'user', 'senior_nurse', 'nurse', 'accountant', 'disposal_officer'];
+    /** Роли, которые могут входить в систему и работать в интерфейсе. */
+    public const LOGIN_ROLES = ['admin', 'user', 'senior_nurse', 'nurse', 'accountant', 'disposal_officer'];
+
+    /** Служебные роли подписантов PDF (учетные записи создаются как неактивные, без входа в систему). */
+    public const SYSTEM_SIGNER_ROLES = ['sign_chief_doctor', 'sign_writeoff_head', 'sign_move_head'];
+
+    /** Все роли, существующие в БД. */
+    public const ROLES = [...self::LOGIN_ROLES, ...self::SYSTEM_SIGNER_ROLES];
 
     /** Названия ролей для отображения. */
     public const ROLE_LABELS = [
@@ -32,6 +38,9 @@ class User extends Authenticatable
         'nurse' => 'Медсестра',
         'accountant' => 'Бухгалтер',
         'disposal_officer' => 'Ответственный за утилизацию',
+        'sign_chief_doctor' => 'Подписант: главный врач',
+        'sign_writeoff_head' => 'Подписант: заведующая отделением (списание)',
+        'sign_move_head' => 'Подписант: заведующая отделением (перемещение)',
     ];
 
     /** Является ли пользователь администратором. */

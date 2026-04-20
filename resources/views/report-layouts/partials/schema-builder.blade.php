@@ -1,4 +1,4 @@
-{{-- Ожидается родитель: reportLayoutForm(@js($initialSchema), @js($headerSourceLayouts ?? []), @js($footerPickUsers ?? [])) --}}
+{{-- Ожидается родитель: reportLayoutForm(@js($initialSchema), @js($documentHeaders ?? []), @js($initialDocumentHeaderId), @js($footerPickUsers ?? [])) --}}
 
 @php
     $cIn = 'w-full rounded-xl border border-slate-200 bg-white text-slate-800 placeholder:text-slate-400 min-h-[48px] px-4 py-2.5 text-base shadow-sm focus:border-teal-600/45 focus:ring-2 focus:ring-teal-500/15 focus:outline-none transition-colors duration-150';
@@ -52,7 +52,7 @@
                 </p>
                 <div x-show="pdfFooterStyle === 'rapport_two' || pdfFooterStyle === 'rapport_three'" x-cloak class="mt-4 space-y-3 max-w-xl">
                     <div>
-                        <label for="pdf_footer_head_user" class="{{ $lbl }}">Заведующая отделением (роль «Пользователь»)</label>
+                        <label for="pdf_footer_head_user" class="{{ $lbl }}">Заведующая отделением (пользователи и подписанты отделения)</label>
                         <select id="pdf_footer_head_user" x-model="pdfFooterHeadUserId" class="{{ $cSel }}">
                             <option value="">По умолчанию — первый по фамилии</option>
                             <template x-for="u in footerPickUsersHead" :key="u.id">
@@ -113,89 +113,40 @@
         </div>
     </section>
 
-    {{-- Шапка --}}
-    <section class="layout-form-block layout-form-block--tint rounded-2xl border-2 border-slate-300 border-l-[6px] border-l-slate-600 p-6 sm:p-8 space-y-6">
+    {{-- Шапка: отдельный макет (document_headers) --}}
+    <section class="layout-form-block layout-form-block--tint rounded-2xl border-2 border-slate-300 border-l-[6px] border-l-slate-600 p-6 sm:p-8 space-y-5">
         <h3 class="text-lg font-semibold text-slate-800 tracking-tight">Шапка документа</h3>
-
-        <div x-show="headerSourceLayouts.length > 0" x-cloak class="rounded-xl border border-dashed border-teal-400 bg-teal-50/70 p-4 sm:p-5 space-y-3">
-            <p class="text-sm font-semibold text-slate-800">Шапка из другого макета</p>
-            <p class="text-xs text-slate-600 leading-relaxed max-w-3xl">Подставляются только три блока шапки (текст, выравнивание, шрифт). Остальные настройки макета не меняются. Для строк с «В заявке» после подстановки создаются новые внутренние ключи.</p>
-            <div class="flex flex-wrap gap-3 items-end">
-                <div class="min-w-[12rem] flex-1 max-w-lg">
-                    <label class="{{ $lblXs }}">Выберите сохранённый макет</label>
-                    <select x-model="selectedHeaderLayoutId"
-                            class="{{ $cSelSm }} w-full min-w-0 text-base min-h-[44px]">
-                        <option value="">— Макет —</option>
-                        <template x-for="opt in headerSourceLayouts" :key="opt.id">
-                            <option :value="String(opt.id)" x-text="opt.title"></option>
-                        </template>
-                    </select>
-                </div>
-                <button type="button"
-                        @click="importHeaderFromSelectedLayout()"
-                        :disabled="!selectedHeaderLayoutId || headerImportBusy"
-                        class="min-h-[44px] px-5 rounded-xl bg-teal-700 text-white font-medium hover:bg-teal-800 disabled:opacity-45 disabled:cursor-not-allowed transition-colors shadow-sm shrink-0">
-                    <span x-show="!headerImportBusy">Подставить шапку</span>
-                    <span x-show="headerImportBusy" x-cloak>Загрузка…</span>
-                </button>
+        <p class="text-sm text-slate-600 leading-relaxed max-w-3xl">
+            Текст шапки настраивается в разделе <a href="{{ route('document-headers.index') }}" class="font-semibold text-teal-800 underline hover:text-teal-950">Макеты шапок</a>.
+            Здесь вы только выбираете готовый макет шапки для этого PDF-макета.
+        </p>
+        @if(empty($documentHeaders))
+            <div class="rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 max-w-3xl">
+                Пока нет ни одного макета шапки. Сначала <a href="{{ route('document-headers.create') }}" class="font-semibold underline">создайте макет шапки</a>, затем вернитесь сюда и выберите его в списке.
             </div>
-            <p x-show="headerImportError" x-cloak class="text-sm text-rose-600" x-text="headerImportError"></p>
+        @endif
+
+        <div class="max-w-xl space-y-2">
+            <label for="document_header_id" class="{{ $lbl }}">Макет шапки</label>
+            <select name="document_header_id" id="document_header_id" x-model="selectedDocumentHeaderId"
+                    class="{{ $cSel }}">
+                <option value="">— Не выбрано —</option>
+                <template x-for="opt in documentHeaders" :key="opt.id">
+                    <option :value="String(opt.id)" x-text="opt.title"></option>
+                </template>
+            </select>
+            @error('document_header_id')<p class="text-rose-600 text-sm mt-1">{{ $message }}</p>@enderror
+            <p class="text-xs text-slate-500">
+                <a href="{{ route('document-headers.create') }}" target="_blank" rel="noopener noreferrer" class="text-teal-700 font-medium underline hover:text-teal-900">Создать новый макет шапки</a>
+                (откроется в новой вкладке)
+            </p>
         </div>
 
-        <template x-for="(section, si) in headerSections" :key="si">
-            <div class="layout-form-block--nested rounded-xl border border-slate-300 bg-white p-5 sm:p-6 space-y-4">
-                <div class="font-medium text-slate-800 text-base" x-text="'Блок шапки ' + (si + 1)"></div>
-                <div class="flex flex-wrap gap-5 items-end">
-                    <div>
-                        <label class="{{ $lblXs }}">Выравнивание</label>
-                        <select x-model="section.align"
-                                class="{{ $cSelSm }} min-w-[10rem]">
-                            <option value="center">По центру</option>
-                            <option value="left">Слева</option>
-                            <option value="right">Справа</option>
-                        </select>
-                    </div>
-                    <label class="flex items-center gap-2.5 cursor-pointer pb-1">
-                        <input type="checkbox" x-model="section.bold" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500/30 w-5 h-5">
-                        <span class="text-sm text-slate-700">Жирный</span>
-                    </label>
-                    <div>
-                        <label class="{{ $lblXs }}">Шрифт блока</label>
-                        <select x-model="section.font_family"
-                                class="{{ $cSelSm }} min-w-[13rem] max-w-full">
-                            <option value="DejaVu Serif">Times New Roman</option>
-                            <option value="DejaVu Sans">Arial</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="{{ $lblXs }}">Размер (pt)</label>
-                        <select x-model.number="section.font_size_pt"
-                                class="{{ $cSelSm }} w-[5.85rem]">
-                            @foreach([9,10,11,12,13,14,16,18,20] as $pt)
-                                <option value="{{ $pt }}">{{ $pt }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
-                <div class="space-y-3 pt-2 border-t border-slate-100">
-                    <span class="text-sm font-medium text-slate-600">Строки блока</span>
-                    <template x-for="(line, li) in section.lines" :key="line.line_id || ('h_' + si + '_' + li)">
-                        <div class="flex flex-wrap gap-2 items-center">
-                            <input type="text" x-model="line.text"
-                                   class="flex-1 min-w-[12rem] rounded-xl border border-slate-200 bg-white shadow-sm text-base min-h-[44px] px-4 focus:border-teal-600/45 focus:ring-2 focus:ring-teal-500/15 focus:outline-none transition-colors"
-                                   placeholder="Текст строки">
-                            <label class="inline-flex items-center gap-2 cursor-pointer shrink-0 text-sm text-slate-700 min-h-[44px] px-2 rounded-lg border border-transparent hover:bg-slate-50">
-                                <input type="checkbox" x-model="line.editable" @change="onHeaderLineEditableToggle(si, li)"
-                                       class="rounded border-slate-300 text-teal-600 focus:ring-teal-500/30 w-5 h-5">
-                                <span>В заявке <span class="text-slate-500 font-normal">(ФИО и т.п.)</span></span>
-                            </label>
-                            <button type="button" @click="removeHeaderLine(si, li)" class="text-slate-400 hover:text-rose-600 px-2.5 py-2 font-medium shrink-0 rounded-lg hover:bg-rose-50 transition-colors" title="Удалить строку">✕</button>
-                        </div>
-                    </template>
-                    <button type="button" @click="addHeaderLine(si)" class="text-teal-700 font-medium text-sm hover:text-teal-800 hover:underline">+ Строка</button>
-                </div>
-            </div>
-        </template>
+        <div x-show="legacyHeaderSnapshot && !selectedDocumentHeaderId" x-cloak
+             class="rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-950 leading-relaxed">
+            У этого макета шапка сохранена <strong class="font-semibold">в старом виде</strong> (внутри JSON макета). PDF по-прежнему использует её.
+            Чтобы перейти на отдельные макеты шапок, создайте макет шапки в разделе выше и выберите его здесь — после сохранения встроенная копия из JSON будет снята.
+        </div>
     </section>
 
     {{-- Вкладки --}}
@@ -247,6 +198,13 @@
                         </select>
                     </div>
                 </div>
+                <label class="flex items-start gap-3 cursor-pointer rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+                    <input type="checkbox" x-model="field.include_in_pdf_filename" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500/30 w-5 h-5 mt-0.5 shrink-0">
+                    <span>
+                        <span class="block text-sm font-medium text-slate-700">Включать значение в имя скачиваемого PDF</span>
+                        <span class="block text-xs text-slate-500 mt-1 leading-relaxed">К названию макета через подчёркивание подставятся выбранные поля (например: наименование оборудования и модель). Порядок — как в списке полей выше.</span>
+                    </span>
+                </label>
                 <div x-show="field.type === 'select'" x-cloak class="space-y-4 pl-1 sm:pl-3 border-l-2 border-slate-200">
                     <label class="flex items-center gap-3 cursor-pointer">
                         <input type="checkbox" x-model="field.allow_other" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500/30 w-5 h-5">
@@ -317,6 +275,7 @@
         <div class="layout-form-block--nested rounded-xl border border-slate-300 bg-slate-50/90 p-5">
             <p class="text-sm font-medium text-slate-700 mb-1">Вставить поле</p>
             <p class="text-sm text-slate-500 mb-4 leading-relaxed">Сначала задайте названия на вкладке «Поля заявки». Кнопки ниже вставляют поля и спец-токены (списки оборудования из БД по заявкам).</p>
+            <p class="text-xs text-slate-600 mb-4 leading-relaxed max-w-3xl">После «от …» ФИО обычно нужно в <strong>родительном</strong> падеже. Если включена DaData, вставьте поле и допишите суффикс к токену: <code>&#123;&#123;field:ид_поля|genitive&#125;&#125;</code> (также: <code>|dative</code>, <code>|nominative</code> и др.).</p>
             <div class="flex flex-wrap gap-2.5">
                 <button type="button" @click="insertSystemToken('sys.writeoff_equipment_list')"
                         title="В PDF — нумерованный список из БД: только оборудование со статусом «заявка на списание», без подтверждения администратора"

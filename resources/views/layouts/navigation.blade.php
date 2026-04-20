@@ -24,7 +24,7 @@
                             Заявки
                         </x-nav-link>
                     @endif
-                    @if(Auth::user()->isAdmin())
+                    @if(Auth::user()->canAddReports())
                         <x-dropdown align="left" width="56">
                             <x-slot name="trigger">
                                 <button class="inline-flex items-center min-h-[48px] px-4 py-3 text-base font-medium text-slate-700 rounded-xl hover:bg-teal-50 hover:text-teal-700 focus:outline-none transition border border-transparent hover:border-teal-100">
@@ -35,10 +35,13 @@
                                 </button>
                             </x-slot>
                             <x-slot name="content">
+                                <x-dropdown-link :href="route('document-headers.index')">Макеты шапок</x-dropdown-link>
                                 <x-dropdown-link :href="route('report-layouts.index')">Макеты заявок</x-dropdown-link>
                                 <x-dropdown-link :href="route('report-requests.index')">Заявки по макетам</x-dropdown-link>
                             </x-slot>
                         </x-dropdown>
+                    @endif
+                    @if(Auth::user()->isAdmin())
                         <x-dropdown align="left" width="48">
                             <x-slot name="trigger">
                                 <button class="inline-flex items-center min-h-[48px] px-4 py-3 text-base font-medium text-slate-700 rounded-xl hover:bg-teal-50 hover:text-teal-700 focus:outline-none transition border border-transparent hover:border-teal-100">
@@ -104,9 +107,12 @@
             @if(Auth::user()->isAdmin() || Auth::user()->isAccountant())
                 <x-responsive-nav-link :href="route('equipment-requests.index')" :active="request()->routeIs('equipment-requests.*')">Заявки</x-responsive-nav-link>
             @endif
-            @if(Auth::user()->isAdmin())
+            @if(Auth::user()->canAddReports())
+                <x-responsive-nav-link :href="route('document-headers.index')" :active="request()->routeIs('document-headers.*')">Макеты шапок</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('report-layouts.index')" :active="request()->routeIs('report-layouts.*')">Макеты заявок</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('report-requests.index')" :active="request()->routeIs('report-requests.*')">Заявки по макетам</x-responsive-nav-link>
+            @endif
+            @if(Auth::user()->isAdmin())
                 <x-responsive-nav-link :href="route('equipment-types.index')" :active="request()->routeIs('equipment-types.*')">Вид оборудования</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('departments.index')" :active="request()->routeIs('departments.*')">Отделы</x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('cabinets.index')" :active="request()->routeIs('cabinets.*')">Помещение / Кабинет</x-responsive-nav-link>

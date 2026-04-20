@@ -381,9 +381,12 @@ class ActivityArchiveController extends Controller
                 $equipment->images()->create(['image' => $path]);
             }
 
-            $equipment->documents()->get()->each(function (EquipmentDocument $doc) {
-                Storage::disk('public')->delete($doc->document);
-                $doc->delete();
+            $equipment->documents()->get()->each(function (EquipmentDocument $doc) use ($equipment) {
+                $equipment->documents()->detach($doc->id);
+                if (! $doc->equipment()->exists()) {
+                    Storage::disk('public')->delete($doc->document);
+                    $doc->delete();
+                }
             });
             foreach ($payload['documents'] ?? [] as $item) {
                 if (! is_array($item)) {
@@ -400,12 +403,13 @@ class ActivityArchiveController extends Controller
                 if ($docTypeId === null || $docTypeId === 0) {
                     continue;
                 }
-                $equipment->documents()->create([
+                $doc = EquipmentDocument::query()->create([
                     'document' => $path,
                     'name' => $item['name'] ?? 'Документ',
                     'document_type_id' => $docTypeId,
                     'uploaded_at' => $uploaded ? Carbon::parse($uploaded) : now(),
                 ]);
+                $equipment->documents()->syncWithoutDetaching([$doc->id]);
             }
 
             if ($equipment->images()->count() === 0) {

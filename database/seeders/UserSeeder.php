@@ -15,6 +15,9 @@ class UserSeeder extends Seeder
         $userRoleId = DB::table('roles')->where('name', 'user')->value('id');
         $nurseRoleId = DB::table('roles')->where('name', 'senior_nurse')->value('id');
         $accountantRoleId = DB::table('roles')->where('name', 'accountant')->value('id');
+        $chiefDoctorSignerRoleId = DB::table('roles')->where('name', 'sign_chief_doctor')->value('id');
+        $writeoffHeadSignerRoleId = DB::table('roles')->where('name', 'sign_writeoff_head')->value('id');
+        $moveHeadSignerRoleId = DB::table('roles')->where('name', 'sign_move_head')->value('id');
 
         $now = now();
 
@@ -70,6 +73,49 @@ class UserSeeder extends Seeder
                 'role_id' => $accountantRoleId,
                 'email_verified_at' => $now,
                 'is_active' => true,
+                'date_joined' => $now,
+            ]
+        );
+
+        // Служебные подписанты: не входят в систему, используются только для автоподстановки в PDF.
+        User::updateOrCreate(
+            ['email' => 'sign-chief-doctor@example.com'],
+            [
+                'first_name' => 'Г.М.',
+                'last_name' => 'Гайдаров',
+                'patronymic' => null,
+                'password' => Hash::make('password'),
+                'role_id' => $chiefDoctorSignerRoleId,
+                'email_verified_at' => $now,
+                'is_active' => false,
+                'date_joined' => $now,
+            ]
+        );
+
+        User::updateOrCreate(
+            ['email' => 'sign-writeoff-head@example.com'],
+            [
+                'first_name' => 'Э.Г.',
+                'last_name' => 'Гайдарова',
+                'patronymic' => null,
+                'password' => Hash::make('password'),
+                'role_id' => $writeoffHeadSignerRoleId,
+                'email_verified_at' => $now,
+                'is_active' => false,
+                'date_joined' => $now,
+            ]
+        );
+
+        User::updateOrCreate(
+            ['email' => 'sign-move-head@example.com'],
+            [
+                'first_name' => 'Н.М.',
+                'last_name' => 'Черных',
+                'patronymic' => null,
+                'password' => Hash::make('password'),
+                'role_id' => $moveHeadSignerRoleId,
+                'email_verified_at' => $now,
+                'is_active' => false,
                 'date_joined' => $now,
             ]
         );

@@ -16,17 +16,13 @@ class RequestRecord extends Model
         'registry_number',
         'data',
         'created_by',
-        'checked_by',
         'request_layout_id',
-        'scores',
-        'refusal',
     ];
 
     protected function casts(): array
     {
         return [
             'data' => 'array',
-            'scores' => 'decimal:2',
             'registry_number' => 'integer',
         ];
     }
@@ -39,10 +35,5 @@ class RequestRecord extends Model
     public function author(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
-    }
-
-    public function checker(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'checked_by');
     }
 }

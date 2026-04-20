@@ -7,30 +7,57 @@ use App\Models\EquipmentRequest;
 use App\Models\RequestRecord;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\DadataContextualHtmlDeclineService;
+use App\Services\DadataNameDeclensionService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Str;
 
 final class ReportDocumentRenderer
 {
+    private const REPORT_KIND_WRITEOFF = 'writeoff';
+
+    private const REPORT_KIND_MOVE = 'move';
+
+    private const REPORT_KIND_DEFAULT = 'default';
+
+    /** @var list<string> */
+    private const PLACEHOLDER_PERSON_NAME_KEYS = [
+        'user.name',
+        'recipient.name',
+        'sys.chief_doctor_name',
+        'sys.department_head_name',
+        'sys.senior_nurse_name',
+    ];
+
+    /** Роли, допустимые для явного выбора «заведующая отделением» в макете PDF. */
+    private const RAPPORT_HEAD_LAYOUT_PICK_ROLES = ['user', 'sign_writeoff_head', 'sign_move_head'];
+
+    public function __construct(
+        private readonly DadataNameDeclensionService $dadataNames,
+        private readonly DadataContextualHtmlDeclineService $contextualHtmlDecline,
+    ) {}
+
     public function renderHtml(RequestRecord $record): string
     {
-        $record->loadMissing('layout', 'author');
+        $record->loadMissing(['layout.documentHeader', 'author']);
         $layout = $record->layout;
         $author = $record->author;
         if ($layout === null || $author === null) {
             throw new \InvalidArgumentException('Заявка должна иметь макет и автора.');
         }
 
-        $schema = $layout->schema ?? [];
+        $schema = $layout->effectiveSchema();
         $data = $record->data ?? [];
 
         $recipient = $this->resolveRecipient($data) ?? $author;
-        $placeholderMap = $this->buildPlaceholderMap($data, $author, $recipient);
+        $reportKind = $this->detectReportKind($layout->title ?? null, $schema);
+        $placeholderMap = $this->buildPlaceholderMap($data, $author, $recipient, $record, $reportKind);
 
         $headerHtml = '';
         if ($layout->has_header) {
             $headerConfig = (isset($schema['header']) && is_array($schema['header'])) ? $schema['header'] : null;
-            $headerHtml = $this->renderHeaderBlocks($placeholderMap, $headerConfig, $data);
+            $headerHtml = $this->renderHeaderBlocks($placeholderMap, $headerConfig, $data, $reportKind);
         }
 
         $bodyHtml = (string) ($schema['body_html'] ?? '');
@@ -41,6 +68,12 @@ final class ReportDocumentRenderer
         $bodyHtml = $this->replaceMoveEquipmentListToken($bodyHtml);
         $bodyHtml = $this->replaceTableTokens($bodyHtml, $data);
         $bodyHtml = $this->replacePlaceholders($bodyHtml, $placeholderMap);
+
+        $contextDeclineCandidates = $this->collectPersonNameCandidatesForContextDecline($placeholderMap, $data, $schema);
+        if ($contextDeclineCandidates !== []) {
+            $headerHtml = $this->contextualHtmlDecline->applyToHtml($headerHtml, $contextDeclineCandidates);
+            $bodyHtml = $this->contextualHtmlDecline->applyToHtml($bodyHtml, $contextDeclineCandidates);
+        }
 
         $title = array_key_exists('document_title', $schema)
             ? trim((string) $schema['document_title'])
@@ -55,7 +88,7 @@ final class ReportDocumentRenderer
         $bodyFontPt = $this->clampFontSizePt($schema['body_default_font_size_pt'] ?? 11);
         $bodyLineHeight = $this->clampLineHeight($schema['body_line_height'] ?? 1.35);
 
-        $footerBlock = $this->buildFooterBlock($schema, $placeholderMap, $record);
+        $footerBlock = $this->buildFooterBlock($schema, $placeholderMap, $record, $reportKind);
 
         return Blade::render(<<<'BLADE'
 <!DOCTYPE html>
@@ -81,11 +114,10 @@ final class ReportDocumentRenderer
         .sign-line { border-top: 1px solid #000; display: inline-block; min-width: 160px; margin-right: 6px; }
         .footer-triple { margin-top: 28px; font-size: {{ $bodyFontPt }}pt; }
         .footer-triple .footer-date-line { margin-bottom: 14px; }
-        table.sig-line { width: 100%; border-collapse: collapse; margin: 12px 0; }
+        table.sig-line { width: 100%; border-collapse: collapse; margin: 12px 0; table-layout: fixed; }
         table.sig-line td { vertical-align: bottom; padding: 2px 0; font-size: {{ $bodyFontPt }}pt; }
-        table.sig-line td.sig-role { white-space: nowrap; padding-right: 6px; }
-        table.sig-line td.sig-dots { border-bottom: 1px dotted #333; }
-        table.sig-line td.sig-name { white-space: nowrap; padding-left: 8px; text-align: right; }
+        table.sig-line td.sig-role { white-space: nowrap; width: 1%; padding-right: 16px; }
+        table.sig-line td.sig-name { text-align: right; word-wrap: break-word; }
     </style>
 </head>
 <body>
@@ -117,7 +149,7 @@ BLADE, [
     public function renderPdfResponse(RequestRecord $record, ?string $filename = null)
     {
         $html = $this->renderHtml($record);
-        $name = $filename ?? ('zayavka-'.$record->id.'.pdf');
+        $name = $filename ?? $this->defaultPdfDownloadFilename($record);
 
         return Pdf::loadHTML($html, 'UTF-8')
             ->setPaper('a4', 'portrait')
@@ -125,10 +157,186 @@ BLADE, [
     }
 
     /**
+     * Имя файла при скачивании: название макета ({@see RequestLayout::$title}) и значения полей заявки
+     * (поля с флагом include_in_pdf_filename или эвристика по подписи поля).
+     */
+    private function defaultPdfDownloadFilename(RequestRecord $record): string
+    {
+        $record->loadMissing(['layout.documentHeader']);
+        $layout = $record->layout;
+        $schema = $layout !== null ? $layout->effectiveSchema() : [];
+
+        $layoutTitle = trim((string) ($layout?->title ?? ''));
+        if ($layoutTitle === '') {
+            $layoutTitle = isset($schema['document_title']) ? trim((string) $schema['document_title']) : '';
+        }
+        if ($layoutTitle === '') {
+            $layoutTitle = 'zayavka-'.$record->getKey();
+        }
+
+        $base = $this->sanitizePdfDownloadBasename($layoutTitle);
+        if ($base === '') {
+            $base = 'zayavka-'.$record->getKey();
+        }
+
+        $segments = $this->pdfFilenameSegmentsFromRequestData($record, $schema);
+        $parts = [$base];
+        foreach ($segments as $seg) {
+            $clean = $this->sanitizePdfDownloadBasename($seg);
+            if ($clean !== '') {
+                $parts[] = $clean;
+            }
+        }
+
+        if (count($parts) === 1) {
+            $registry = (int) ($record->registry_number ?? 0);
+            $parts[] = '№'.$registry;
+        }
+
+        $stem = implode('_', $parts);
+        $stem = Str::limit($stem, 180, '');
+
+        return $stem.'.pdf';
+    }
+
+    /**
+     * Значения полей для имени файла: явные флаги в макете или эвристика по названию поля.
+     *
+     * @return list<string>
+     */
+    private function pdfFilenameSegmentsFromRequestData(RequestRecord $record, array $schema): array
+    {
+        $data = is_array($record->data) ? $record->data : [];
+        $fields = isset($schema['fields']) && is_array($schema['fields']) ? $schema['fields'] : [];
+
+        $hasExplicit = false;
+        foreach ($fields as $f) {
+            if (is_array($f) && ! empty($f['include_in_pdf_filename'])) {
+                $hasExplicit = true;
+                break;
+            }
+        }
+
+        if ($hasExplicit) {
+            $out = [];
+            foreach ($fields as $f) {
+                if (! is_array($f) || empty($f['include_in_pdf_filename'])) {
+                    continue;
+                }
+                $id = (string) ($f['id'] ?? '');
+                if ($id === '' || ! array_key_exists($id, $data)) {
+                    continue;
+                }
+                $plain = $this->extractPlainTextForPdfFilename($data[$id]);
+                if ($plain !== '') {
+                    $out[] = $plain;
+                }
+            }
+
+            return $out;
+        }
+
+        return $this->pdfFilenameSegmentsByLabelHeuristic($fields, $data);
+    }
+
+    /**
+     * Старые макеты без флагов: одно поле «наименование оборудования» и одно «модель» / «тип» и т.п.
+     *
+     * @param  array<int, mixed>  $fields
+     * @param  array<string, mixed>  $data
+     * @return list<string>
+     */
+    private function pdfFilenameSegmentsByLabelHeuristic(array $fields, array $data): array
+    {
+        $out = [];
+
+        foreach ($fields as $f) {
+            if (! is_array($f)) {
+                continue;
+            }
+            $id = (string) ($f['id'] ?? '');
+            $label = mb_strtolower((string) ($f['name'] ?? ''), 'UTF-8');
+            if ($id === '' || ! array_key_exists($id, $data)) {
+                continue;
+            }
+            if (! preg_match('/наименование|название|оборудован/i', $label)) {
+                continue;
+            }
+            if (preg_match('/^модель|^тип\s|марка|заводск/i', $label)) {
+                continue;
+            }
+            $plain = $this->extractPlainTextForPdfFilename($data[$id]);
+            if ($plain !== '') {
+                $out[] = $plain;
+                break;
+            }
+        }
+
+        foreach ($fields as $f) {
+            if (! is_array($f)) {
+                continue;
+            }
+            $id = (string) ($f['id'] ?? '');
+            $label = (string) ($f['name'] ?? '');
+            if ($id === '' || ! array_key_exists($id, $data)) {
+                continue;
+            }
+            if (! preg_match('/модель|тип|марка|заводск|гк-/iu', $label)) {
+                continue;
+            }
+            if (preg_match('/наименование|название|оборудован/i', mb_strtolower($label, 'UTF-8'))
+                && ! preg_match('/^модель|^тип\s/u', mb_strtolower($label, 'UTF-8'))) {
+                continue;
+            }
+            $plain = $this->extractPlainTextForPdfFilename($data[$id]);
+            if ($plain !== '') {
+                $out[] = $plain;
+                break;
+            }
+        }
+
+        return $out;
+    }
+
+    private function extractPlainTextForPdfFilename(mixed $value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+        if (is_bool($value)) {
+            return '';
+        }
+        if (is_numeric($value)) {
+            return trim((string) $value);
+        }
+        $s = trim((string) $value);
+        if ($s === '') {
+            return '';
+        }
+        if (str_contains($s, '<') && preg_match('/<[a-z][\s\S]*>/i', $s)) {
+            $s = strip_tags($s);
+        }
+        $s = html_entity_decode($s, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
+
+        return trim($s);
+    }
+
+    private function sanitizePdfDownloadBasename(string $name): string
+    {
+        $name = basename(str_replace(["\0"], '', $name));
+        $name = str_replace(['/', '\\'], '_', $name);
+        $name = preg_replace('/[^\p{L}\p{N}\s._\-–—()«»№]/u', '_', $name) ?? '';
+        $name = trim(preg_replace('/_+/u', '_', $name) ?? '', '._ ');
+
+        return Str::limit($name, 120, '');
+    }
+
+    /**
      * @param  array<string, mixed>  $schema
      * @param  array<string, string>  $placeholderMap
      */
-    private function buildFooterBlock(array $schema, array $placeholderMap, RequestRecord $record): string
+    private function buildFooterBlock(array $schema, array $placeholderMap, RequestRecord $record, string $reportKind): string
     {
         $dateRaw = $placeholderMap['sys.date'] ?? now()->format('d.m.Y');
         $dateEsc = e((string) $dateRaw);
@@ -142,13 +350,13 @@ BLADE, [
         $style = $this->normalizePdfFooterStyle((string) ($pdfFooter['style'] ?? 'legacy'));
 
         if ($style === 'rapport_two') {
-            return $this->buildRapportSignatureFooterHtml($dateEsc, $record, 2, $pdfFooter);
+            return $this->buildRapportSignatureFooterHtml($dateEsc, $record, 2, $pdfFooter, $reportKind);
         }
         if ($style === 'rapport_three') {
-            return $this->buildRapportSignatureFooterHtml($dateEsc, $record, 3, $pdfFooter);
+            return $this->buildRapportSignatureFooterHtml($dateEsc, $record, 3, $pdfFooter, $reportKind);
         }
 
-        $signName = e((string) $author->name);
+        $signName = $this->pdfPersonName((string) $author->name);
 
         return '<div class="footer-row"><div class="footer-left">'.$dateEsc.'</div>'
             .'<div class="footer-right"><span class="sign-line"></span> / '.$signName.'</div></div>';
@@ -189,12 +397,15 @@ BLADE, [
      * @param  2|3  $signerCount
      * @param  array<string, mixed>  $pdfFooter
      */
-    private function buildRapportSignatureFooterHtml(string $dateEscaped, RequestRecord $record, int $signerCount, array $pdfFooter): string
+    private function buildRapportSignatureFooterHtml(string $dateEscaped, RequestRecord $record, int $signerCount, array $pdfFooter, string $reportKind): string
     {
-        $head = $this->resolveFooterUserByPickedId($pdfFooter['head_user_id'] ?? null, 'user');
-        $senior = $this->resolveSeniorNurseSignerForFooter($record);
+        $head = $this->resolveRapportHeadFromLayoutPick($pdfFooter['head_user_id'] ?? null)
+            ?? $this->resolveDepartmentHeadSignerForReport($reportKind)
+            ?? $this->firstActiveUserByRole('user');
+        $senior = $this->resolveSeniorNurseSignerForFooter($record, $reportKind);
+        // Инженер в рапорте всегда из роли "admin" (администратор), без подстановки других ролей.
         $engineer = $signerCount >= 3
-            ? $this->resolveFooterUserByPickedId($pdfFooter['engineer_user_id'] ?? null, 'admin')
+            ? $this->firstActiveUserByRole('admin')
             : null;
 
         $rows = [
@@ -208,10 +419,9 @@ BLADE, [
         $html = '<div class="footer-triple"><div class="footer-date-line">'.$dateEscaped.'</div>';
 
         foreach ($rows as [$label, $signer]) {
-            $nameHtml = $signer !== null ? e((string) $signer->name) : '________________';
+            $nameHtml = $this->rapportFooterSignerNameHtml($signer);
             $html .= '<table class="sig-line"><tr>'
                 .'<td class="sig-role">'.$this->safeText($label).'</td>'
-                .'<td class="sig-dots">&nbsp;</td>'
                 .'<td class="sig-name">'.$nameHtml.'</td>'
                 .'</tr></table>';
         }
@@ -222,50 +432,79 @@ BLADE, [
     }
 
     /**
-     * Подписант по id из макета; при пустом или неверном id — первый активный с нужной ролью.
-     *
-     * @param  mixed  $rawId
+     * ФИО в подписи рапорта — именительный падеж как в учётной записи, без DaData (подпись не «кому», а кто подписывает).
      */
-    private function resolveFooterUserByPickedId(mixed $rawId, string $expectedRole): ?User
+    private function rapportFooterSignerNameHtml(?User $signer): string
     {
-        $id = is_numeric($rawId) ? (int) $rawId : 0;
-        if ($id > 0) {
-            $user = User::query()->where('is_active', true)->whereKey($id)->first();
-            if ($user !== null && $user->role === $expectedRole) {
-                return $user;
-            }
+        if ($signer === null) {
+            return '________________';
         }
 
-        return $this->firstActiveUserByRole($expectedRole);
+        return e(trim((string) $signer->name));
     }
 
     /**
-     * Старшая медсестра в подвале: автор последней неподтверждённой заявки на списание или перемещение;
-     * иначе автор PDF-заявки (если роль senior_nurse); иначе первая активная старшая медсестра из БД.
+     * Заведующая отделением из макета: явный выбор id (роли «Пользователь» или подписант отделения по типу заявки).
+     * Служебные подписанты (sign_*_head) могут быть без входа в систему (is_active = false).
      */
-    private function resolveSeniorNurseSignerForFooter(RequestRecord $record): ?User
+    private function resolveRapportHeadFromLayoutPick(mixed $rawId): ?User
     {
-        $fromRequest = $this->userFromLatestPendingWriteoffOrMoveRequest();
-
-        if ($fromRequest !== null) {
-            return $fromRequest;
+        $id = is_numeric($rawId) ? (int) $rawId : 0;
+        if ($id <= 0) {
+            return null;
+        }
+        $user = User::query()->whereKey($id)->first();
+        if ($user === null) {
+            return null;
+        }
+        if (! in_array($user->role, self::RAPPORT_HEAD_LAYOUT_PICK_ROLES, true)) {
+            return null;
+        }
+        if (! $user->is_active && ! in_array($user->role, ['sign_writeoff_head', 'sign_move_head'], true)) {
+            return null;
         }
 
+        return $user;
+    }
+
+    /**
+     * Старшая медсестра: в первую очередь автор текущей PDF-заявки (кто её заполнил),
+     * если роль автора = senior_nurse; иначе автор последней неподтверждённой заявки нужного типа;
+     * иначе первая активная старшая медсестра из БД.
+     */
+    private function resolveSeniorNurseSignerForFooter(RequestRecord $record, string $reportKind): ?User
+    {
         $author = $record->author;
         if ($author !== null && $author->is_active && $author->role === 'senior_nurse') {
             return $author;
         }
 
+        $fromRequest = $this->userFromLatestPendingRequestByReportKind($reportKind);
+        if ($fromRequest !== null) {
+            return $fromRequest;
+        }
+
         return $this->firstActiveUserByRole('senior_nurse');
     }
 
-    private function userFromLatestPendingWriteoffOrMoveRequest(): ?User
+    private function userFromLatestPendingRequestByReportKind(string $reportKind): ?User
     {
+        $typeCodes = match ($reportKind) {
+            self::REPORT_KIND_WRITEOFF => [EquipmentRequest::TYPE_WRITEOFF],
+            self::REPORT_KIND_MOVE => [EquipmentRequest::TYPE_MOVE],
+            default => [EquipmentRequest::TYPE_WRITEOFF, EquipmentRequest::TYPE_MOVE],
+        };
+
         $equipmentRequest = EquipmentRequest::query()
             ->whereRelation('requestStatus', 'code', EquipmentRequest::STATUS_PENDING)
-            ->where(function ($q): void {
-                $q->whereRelation('requestType', 'code', EquipmentRequest::TYPE_WRITEOFF)
-                    ->orWhereRelation('requestType', 'code', EquipmentRequest::TYPE_MOVE);
+            ->where(function ($q) use ($typeCodes): void {
+                foreach ($typeCodes as $idx => $typeCode) {
+                    if ($idx === 0) {
+                        $q->whereRelation('requestType', 'code', $typeCode);
+                    } else {
+                        $q->orWhereRelation('requestType', 'code', $typeCode);
+                    }
+                }
             })
             ->orderByDesc('created_at')
             ->orderByDesc('id')
@@ -275,10 +514,7 @@ BLADE, [
             return null;
         }
 
-        return User::query()
-            ->where('is_active', true)
-            ->whereKey($equipmentRequest->user_id)
-            ->first();
+        return User::query()->whereKey($equipmentRequest->user_id)->first();
     }
 
     private function resolveRecipient(array $data): ?User
@@ -292,14 +528,69 @@ BLADE, [
     }
 
     /**
+     * Строки ФИО из данных заявки и карты подстановок — для поиска «голого» текста в HTML и склонения по контексту (DaData).
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $schema
+     * @return list<string>
+     */
+    private function collectPersonNameCandidatesForContextDecline(array $placeholderMap, array $data, array $schema): array
+    {
+        $out = [];
+        foreach (self::PLACEHOLDER_PERSON_NAME_KEYS as $k) {
+            $v = trim((string) ($placeholderMap[$k] ?? ''));
+            if (mb_strlen($v) >= 4) {
+                $out[] = $v;
+            }
+        }
+        $headerOverrides = $data['header_overrides'] ?? null;
+        if (is_array($headerOverrides)) {
+            foreach ($headerOverrides as $v) {
+                if (is_string($v)) {
+                    $t = trim($v);
+                    if (mb_strlen($t) >= 4) {
+                        $out[] = $t;
+                    }
+                }
+            }
+        }
+        foreach ($schema['fields'] ?? [] as $f) {
+            if (! is_array($f)) {
+                continue;
+            }
+            $id = (string) ($f['id'] ?? '');
+            if ($id === '' || ! array_key_exists($id, $data)) {
+                continue;
+            }
+            $v = $data[$id];
+            if (! is_string($v)) {
+                continue;
+            }
+            $t = trim(strip_tags($v));
+            if (mb_strlen($t) >= 4) {
+                $out[] = $t;
+            }
+        }
+
+        return array_values(array_unique($out));
+    }
+
+    /**
      * Сырые строки для подстановки; экранирование в {@see replacePlaceholders}.
      *
      * @return array<string, string>
      */
-    private function buildPlaceholderMap(array $data, User $author, User $recipient): array
+    private function buildPlaceholderMap(array $data, User $author, User $recipient, RequestRecord $record, string $reportKind): array
     {
+        $chiefDoctor = $this->resolveSystemSignerByRole('sign_chief_doctor');
+        $departmentHead = $this->resolveDepartmentHeadSignerForReport($reportKind);
+        $seniorNurse = $this->resolveSeniorNurseSignerForFooter($record, $reportKind);
+
         $map = [
             'sys.date' => now()->format('d.m.Y'),
+            'sys.chief_doctor_name' => (string) ($chiefDoctor?->name ?? ''),
+            'sys.department_head_name' => (string) ($departmentHead?->name ?? ''),
+            'sys.senior_nurse_name' => (string) ($seniorNurse?->name ?? ''),
             'user.name' => (string) $author->name,
             'user.id' => (string) $author->getKey(),
             'user.username' => (string) ($author->username ?? ''),
@@ -332,13 +623,30 @@ BLADE, [
     }
 
     /**
+     * Экранирование ФИО для PDF после склонения через DaData.
+     * Если задан $caseOverride (например genitive после «от»), используется он; иначе падеж из конфига.
+     */
+    private function pdfPersonName(string $name, ?string $caseOverride = null): string
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return '';
+        }
+        $declined = ($caseOverride !== null && $caseOverride !== '')
+            ? $this->dadataNames->declineWithCase($name, $caseOverride)
+            : $this->dadataNames->decline($name);
+
+        return e($declined);
+    }
+
+    /**
      * Шапка в JSON {@see RequestLayout} → schema.header: приоритет у {@see sections} (до трёх блоков), иначе legacy {@see blocks}.
      *
      * @param  array<string, string>  $map
      * @param  array<string, mixed>  $recordData  сырые data заявки (в т.ч. header_overrides по line_id)
      * @param  array<string, mixed>|null  $headerRoot
      */
-    private function renderHeaderBlocks(array $map, ?array $headerRoot, array $recordData = []): string
+    private function renderHeaderBlocks(array $map, ?array $headerRoot, array $recordData = [], string $reportKind = self::REPORT_KIND_DEFAULT): string
     {
         if ($headerRoot === null) {
             return '';
@@ -347,7 +655,7 @@ BLADE, [
         $headerOverrides = is_array($recordData['header_overrides'] ?? null) ? $recordData['header_overrides'] : [];
 
         if (isset($headerRoot['sections']) && is_array($headerRoot['sections']) && $headerRoot['sections'] !== []) {
-            return $this->renderHeaderSections($map, $headerRoot['sections'], $headerOverrides);
+            return $this->renderHeaderSections($map, $headerRoot['sections'], $headerOverrides, $reportKind);
         }
 
         if (! isset($headerRoot['blocks']) || ! is_array($headerRoot['blocks']) || $headerRoot['blocks'] === []) {
@@ -390,7 +698,7 @@ BLADE, [
      * @param  array<int, mixed>  $sections
      * @param  array<string, mixed>  $headerOverrides  line_id => текст из заявки
      */
-    private function renderHeaderSections(array $map, array $sections, array $headerOverrides = []): string
+    private function renderHeaderSections(array $map, array $sections, array $headerOverrides = [], string $reportKind = self::REPORT_KIND_DEFAULT): string
     {
         $out = '';
         foreach ($sections as $section) {
@@ -411,7 +719,9 @@ BLADE, [
             $fontPt = $this->clampFontSizePt($section['font_size_pt'] ?? 12);
             $inner = '';
             foreach ($lines as $line) {
-                $raw = $this->resolveHeaderLineText($line, $headerOverrides);
+                $beforeAuto = $this->resolveHeaderLineText($line, $headerOverrides);
+                $afterAuto = $this->applyAutoHeaderNameOverrides($beforeAuto, $reportKind, $map);
+                $raw = $this->declineEditableHeaderPlainTextIfNeeded($beforeAuto, $afterAuto, $line);
                 $inner .= '<div style="margin-bottom:3px;">'.$this->replacePlaceholders($raw, $map).'</div>';
             }
             if ($inner !== '') {
@@ -424,8 +734,6 @@ BLADE, [
 
     /**
      * Строка шапки: строка JSON или { text, editable, line_id } с подстановкой из заявки.
-     *
-     * @param  mixed  $line
      */
     private function resolveHeaderLineText(mixed $line, array $headerOverrides): string
     {
@@ -434,6 +742,9 @@ BLADE, [
         }
         if (! is_array($line)) {
             return '';
+        }
+        if (! empty($line['role_key']) && is_string($line['role_key'])) {
+            return '{{role:'.trim($line['role_key']).'}}';
         }
         $base = (string) ($line['text'] ?? '');
         if (! empty($line['editable']) && ! empty($line['line_id'])) {
@@ -444,6 +755,93 @@ BLADE, [
         }
 
         return $base;
+    }
+
+    /**
+     * Строка «В заявке» с набранным вручную ФИО (без токена {{role:…}}): если авто-подстановка по фамилиям
+     * не сработала, прогоняем текст через DaData — иначе в PDF остаётся именительный падеж из поля ввода.
+     */
+    private function declineEditableHeaderPlainTextIfNeeded(string $beforeAuto, string $afterAuto, mixed $line): string
+    {
+        if ($beforeAuto !== $afterAuto) {
+            return $afterAuto;
+        }
+        $text = trim($afterAuto);
+        if ($text === '' || str_contains($text, '{{')) {
+            return $afterAuto;
+        }
+        if (! is_array($line) || empty($line['editable']) || ! config('dadata.enabled')) {
+            return $afterAuto;
+        }
+
+        return $this->dadataNames->decline($text);
+    }
+
+    private function applyAutoHeaderNameOverrides(string $line, string $reportKind, array $map): string
+    {
+        $chiefDoctorName = trim((string) ($map['sys.chief_doctor_name'] ?? ''));
+        $departmentHeadName = trim((string) ($map['sys.department_head_name'] ?? ''));
+        $seniorNurseName = trim((string) ($map['sys.senior_nurse_name'] ?? ''));
+        $normalized = mb_strtolower(trim($line), 'UTF-8');
+        if ($chiefDoctorName !== '' && str_contains($normalized, 'гайдаров') && ! str_contains($normalized, 'старшей медсестры')) {
+            return $this->dadataNames->decline($chiefDoctorName);
+        }
+        if ($departmentHeadName !== '' && str_contains($normalized, 'черных')) {
+            return $this->dadataNames->decline($departmentHeadName);
+        }
+        if ($departmentHeadName !== '' && str_contains($normalized, 'гайдаров') && $reportKind === self::REPORT_KIND_WRITEOFF) {
+            return $this->dadataNames->decline($departmentHeadName);
+        }
+        if ($seniorNurseName !== '' && str_contains($normalized, 'ефаров')) {
+            return $this->dadataNames->decline($seniorNurseName);
+        }
+
+        return $line;
+    }
+
+    private function resolveDepartmentHeadSignerForReport(string $reportKind): ?User
+    {
+        $role = match ($reportKind) {
+            self::REPORT_KIND_WRITEOFF => 'sign_writeoff_head',
+            self::REPORT_KIND_MOVE => 'sign_move_head',
+            default => null,
+        };
+
+        if ($role === null) {
+            return null;
+        }
+
+        return $this->resolveSystemSignerByRole($role);
+    }
+
+    private function resolveSystemSignerByRole(string $role): ?User
+    {
+        $roleId = Role::query()->where('name', $role)->value('id');
+        if ($roleId === null) {
+            return null;
+        }
+
+        return User::query()
+            ->where('role_id', (int) $roleId)
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    private function detectReportKind(?string $layoutTitle, array $schema): string
+    {
+        $haystack = mb_strtolower(
+            trim((string) $layoutTitle).' '.trim((string) ($schema['document_title'] ?? '')).' '.trim((string) ($schema['body_html'] ?? '')),
+            'UTF-8'
+        );
+
+        if (str_contains($haystack, 'перемещ')) {
+            return self::REPORT_KIND_MOVE;
+        }
+        if (str_contains($haystack, 'списани') || str_contains($haystack, 'утилиз')) {
+            return self::REPORT_KIND_WRITEOFF;
+        }
+
+        return self::REPORT_KIND_DEFAULT;
     }
 
     private function normalizePdfFontFamily(mixed $value): string
@@ -475,16 +873,91 @@ BLADE, [
     private function replacePlaceholders(string $html, array $map): string
     {
         return preg_replace_callback('/\{\{\s*([^}]+?)\s*\}\}/', function (array $m) use ($map) {
-            $key = trim($m[1]);
+            $full = trim($m[1]);
+            $caseOverride = null;
+            if (str_contains($full, '|')) {
+                $parts = explode('|', $full, 2);
+                $full = trim($parts[0]);
+                $caseOverride = isset($parts[1]) ? trim($parts[1]) : null;
+                if ($caseOverride === '') {
+                    $caseOverride = null;
+                }
+            }
+            $key = $full;
+
+            if (str_starts_with($key, 'role:')) {
+                $roleKey = trim(substr($key, strlen('role:')));
+                if ($roleKey === 'senior_nurse') {
+                    $name = trim((string) ($map['sys.senior_nurse_name'] ?? ''));
+                    if ($name === '') {
+                        $name = $this->resolveRoleSignerName($roleKey);
+                    }
+
+                    return $this->pdfPersonName($name, $caseOverride);
+                }
+                if ($roleKey === 'sign_chief_doctor') {
+                    $name = trim((string) ($map['sys.chief_doctor_name'] ?? ''));
+                    if ($name === '') {
+                        $name = $this->resolveRoleSignerName($roleKey);
+                    }
+
+                    return $this->pdfPersonName($name, $caseOverride);
+                }
+                if ($roleKey === 'sign_writeoff_head' || $roleKey === 'sign_move_head') {
+                    $name = trim((string) ($this->resolveSystemSignerByRole($roleKey)?->name ?? ''));
+                    if ($name === '') {
+                        $name = $this->resolveRoleSignerName($roleKey);
+                    }
+
+                    return $this->pdfPersonName($name, $caseOverride);
+                }
+
+                return $this->pdfPersonName($this->resolveRoleSignerName($roleKey), $caseOverride);
+            }
             $raw = $map[$key] ?? '';
             $str = is_string($raw) ? $raw : '';
 
             if (str_starts_with($key, 'field:')) {
+                if ($caseOverride !== null) {
+                    $plain = trim(strip_tags($str));
+                    if ($plain === '') {
+                        return '';
+                    }
+
+                    return e($this->dadataNames->declineWithCase($plain, $caseOverride));
+                }
+
                 return $this->sanitizeFieldHtml($str);
+            }
+
+            if (in_array($key, self::PLACEHOLDER_PERSON_NAME_KEYS, true)) {
+                return $this->pdfPersonName($str, $caseOverride);
             }
 
             return e($str);
         }, $html) ?? $html;
+    }
+
+    private function resolveRoleSignerName(string $roleKey): string
+    {
+        $roleKey = trim($roleKey);
+        if ($roleKey === '') {
+            return '';
+        }
+        if ($roleKey === 'senior_nurse') {
+            $u = $this->firstActiveUserByRole('senior_nurse');
+
+            return (string) ($u?->name ?? '');
+        }
+        if ($roleKey === 'admin' || $roleKey === 'user') {
+            $u = $this->firstActiveUserByRole($roleKey);
+
+            return (string) ($u?->name ?? '');
+        }
+
+        $u = $this->resolveSystemSignerByRole($roleKey);
+
+        return (string) ($u?->name ?? '');
     }
 
     /**

@@ -61,6 +61,11 @@
                                     </div>
                                 @endif
                             </div>
+                            <ul class="mt-3 text-sm text-slate-500 space-y-1" title="Имена файлов в хранилище">
+                                @foreach($images as $img)
+                                    <li class="truncate">{{ basename($img->image) }}</li>
+                                @endforeach
+                            </ul>
                         @else
                             <div class="bg-slate-100 rounded-xl min-h-[200px] flex items-center justify-center text-slate-400 text-sm">
                                 Нет фотографий
@@ -181,11 +186,37 @@
                                 </div>
                             @endif
                             @if($otherDocs->isNotEmpty())
+                                <div class="rounded-xl border-2 border-slate-200 p-4 bg-slate-50">
+                                    <p class="text-base font-semibold text-slate-700 mb-2">Прочие документы</p>
+                                    <p class="text-sm text-slate-500">Здесь отображаются дополнительные документы (включая подписанные акты списания/перемещения).</p>
+                                </div>
                                 @foreach($otherDocs as $doc)
                                     <div class="rounded-xl border-2 border-slate-200 p-4 bg-slate-50">
                                         <a href="{{ asset('storage/' . $doc->document) }}" target="_blank" rel="noopener" download class="text-base font-medium text-teal-600 hover:underline">Скачать {{ $doc->name }}</a>
                                     </div>
                                 @endforeach
+                            @endif
+                            @if(auth()->user()?->canManageEquipment())
+                                <div class="rounded-xl border-2 border-teal-200 p-4 bg-teal-50/40">
+                                    <p class="text-base font-semibold text-slate-700 mb-2">Подписанный акт после печати</p>
+                                    <p class="text-sm text-slate-600 mb-3">После печати и подписания акта загрузите скан/файл сюда — он сохранится в «Прочих документах» карточки оборудования.</p>
+                                    <form method="post" action="{{ route('equipment.documents.store', $equipment) }}" enctype="multipart/form-data" class="space-y-3">
+                                        @csrf
+                                        <input type="hidden" name="type" value="signed_report_act">
+                                        <div>
+                                            <label for="signed_report_act_name" class="block text-sm font-semibold text-slate-600 mb-1">Название документа</label>
+                                            <input id="signed_report_act_name" type="text" name="document_name"
+                                                   class="w-full rounded-xl border border-slate-200 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-base min-h-[44px] px-3"
+                                                   required
+                                                   placeholder="Например: Подписанный акт списания от 17.04.2026">
+                                        </div>
+                                        <div>
+                                            <input id="signed_report_act_file" type="file" name="document" accept="{{ $docAccept }}" required
+                                                   class="block w-full text-sm text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-teal-100 file:text-teal-800">
+                                        </div>
+                                        <button type="submit" class="min-h-[44px] px-4 py-2 rounded-xl text-base font-semibold text-teal-700 bg-teal-100 hover:bg-teal-200">Загрузить в прочие документы</button>
+                                    </form>
+                                </div>
                             @endif
                         </div>
                     </div>
